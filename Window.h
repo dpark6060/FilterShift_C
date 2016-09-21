@@ -24,7 +24,7 @@ class window {
     float TranWidth;
     public:
         window();
-        window(float co, int sr, float sg, float tw);
+        window(float co, float sr, float sg, float tw);
         void kaiserord (float,float);
         float kaiser_atten (int,int);
         void kaiser_beta (float);

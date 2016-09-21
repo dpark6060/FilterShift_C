@@ -7,6 +7,8 @@
 #include <sstream>
 #include <vector>
 
+
+
 #include "miscmaths/optimise.h"
 #include "newmatap.h"
 #include "newmatio.h"
@@ -97,6 +99,252 @@ Option<bool> force(string("--force"), false,
 
 
 
+
+void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int shift,int skip,int slice)
+{
+	//std::cout<<"This Function"<<std::endl;
+	
+
+	
+//	    if shift>0:
+//    # If the shift is larger than zero
+//    # Extend the Upsampled signal by repeating the values at the beginning of the signal by the shift amount
+//    # then resample the signal, starting at index 0, every S indecies, to one S of the end
+//            Rep=np.tile(ZeroSig[0],shift)
+//            ZeroSig=np.append(Rep,ZeroSig,-1)
+//            Sig=ZeroSig[range(0,ZeroSig.shape[-1]-S,S)]       
+//    
+//        else:
+//    # If the Shift is less than zero
+//    # Extend the Upsampled signal by repeating the values at the end of the signal by the shift amount
+//    # Then resample the signal, starting at index shift, every s indicies, to the end
+//            Rep=np.tile(ZeroSig[-1],abs(shift))
+//            ZeroSig=np.append(ZeroSig,Rep,-1)
+//            Sig=ZeroSig[range(int(abs(shift)),ZeroSig.shape[-1]-1,S)]
+
+	int lenT = timeseries->Nrows();
+	int lenF = FIR->size();
+	int center=ceil(lenF/2);
+	float mx=-100;
+	int mxi=0;
+	
+	for (int i=center-5;i<center+5;i++)
+	{
+		if (FIR->operator[](i)>mx)
+		{
+			mx=FIR->operator[](i);
+			mxi=i;
+		}
+	}
+
+	std::vector<int> SamplePoints;
+	//SamplePoints.reserve((int) ceil(lenF/skip));
+	//std::cout<<"resamp"<<std::endl;
+	for (int i = mxi; i>=0; i-=skip)
+	{
+		SamplePoints.insert(SamplePoints.begin(),i);
+	}
+	int Tstart=SamplePoints.size();
+	for (int i = mxi+skip;i<lenF;i+=skip)
+	{
+		SamplePoints.insert(SamplePoints.end(),i);
+	}
+	int firLen=SamplePoints.size();	
+	
+	
+	
+	
+	// If the shift if positive (shifting the signal to the right), then we want to DELAY the filter, add zeros to the END (Right hand side)	
+	std::vector<float> pFIR;
+	//std::cout<<"Assigning FIR"<<std::endl;
+	pFIR.assign(FIR->begin(),FIR->end());
+	//std::cout<<"padding"<<std::endl;
+	std::vector<float> padd;
+	//std::cout<<"shift:\t"<<shift<<std::endl;
+	//std::cout<<"slice:\t"<<slice<<std::endl;
+	padd.reserve(std::abs(shift));
+
+	
+	
+	
+	
+	int ModSample=0;
+	
+	
+	if (shift>0)
+	{
+		//std::vector<float>::iterator it;
+		//std::cout<<pFIR.size()<<std::endl;
+		//std::cout<<pFIR.back()<<std::endl;
+		//it=pFIR.end();
+		//std::cout<<"initializing padd"<<std::endl;
+		padd.assign(std::abs(shift),pFIR.back());
+		pFIR.insert (pFIR.end(),padd.begin(),padd.end());
+		//std::cout<<pFIR.size()<<std::endl;
+		//std::cout<<pFIR.back()<<std::endl;
+		ModSample=shift;
+	}
+	
+	else if (shift<0)
+	{
+		//std::cout<<"initializing padd"<<std::endl;		
+		padd.assign(std::abs(shift),pFIR.front());
+		//std::cout<<"Finished"<<std::endl;
+		//std::cout<<"Insert padd"<<std::endl;
+		pFIR.insert(pFIR.begin(),padd.begin(),padd.end());
+		//std::cout<<"Finished padd"<<std::endl;
+		ModSample=0;
+		
+	}	
+	
+	
+	ColumnVector FIR_down_shift;
+	ColumnVector FIR_down;
+	//std::cout<<"resize"<<std::endl;
+	FIR_down_shift.ReSize(firLen);
+	FIR_down.ReSize(firLen);
+	lenF=FIR_down_shift.Nrows();
+	
+	firLen=1;
+	//std::cout<<"resamp"<<std::endl;
+	for (int i = 0; i< SamplePoints.size(); i++)
+	{
+		FIR_down(firLen)=FIR->operator[](SamplePoints[i]);
+		SamplePoints[i]+=ModSample;
+		FIR_down_shift(firLen)=pFIR[SamplePoints[i]];
+		firLen+=1;
+	}
+	
+	//write_ascii_matrix(FIR_down_shift,"/home/dparker/Desktop/MyOutput/FiltershiftTest/testFIRdown.txt", 16);
+	//std::cout<<"WroteFile"<<std::endl;
+	//ostringstream Convert;
+	//Convert<<slice;
+	//string Output="/home/dparker/Desktop/MyOutput/FiltershiftTest/FIRtestSlice_";
+	//Output+=Convert.str();
+	//Output+=".txt";
+	//write_ascii_matrix(FIR_down_shift,Output.c_str(), 16);
+	
+//	std::ofstream output_file(Output.c_str());
+//    output_file.precision(32);
+//    std::ostream_iterator<float> output_iterator(output_file,"\n");
+//    std::copy(FIR_down_shift.begin(),FIR_down_shift.end(),output_iterator);
+	
+//	Output="/home/dparker/Desktop/MyOutput/FiltershiftTest/SamplePoints_";
+//	Output+=Convert.str();
+//	Output+=".txt";
+//	std::ofstream output_file(Output.c_str());
+//    output_file.precision(32);
+//    std::ostream_iterator<float> output_iterator(output_file,"\n");
+//    std::copy(SamplePoints.begin(),SamplePoints.end(),output_iterator);
+	
+	
+	//std::cout<<"Lenf:\t"<<lenF<<std::endl;
+	
+	if ( lenF >= lenT )
+	{
+		std::cout<<"Filter Order too high"<< std::endl;
+		return;
+	}
+	
+
+	
+	//std::cout<<"filtering"<<std::endl;
+	ColumnVector filtered;
+	filtered.ReSize(lenT);
+	//filtered=0;
+	
+	int startT = floor(lenF/2);	
+	int maxT = lenT-lenF;
+	//std::cout<<"\n\nMaxT: "<<maxT<<std::endl;
+	//std::cout<<"LenF:"<<lenF<<std::endl;
+	float FiltSum=0;
+	for (int i = 0; i<maxT; i++)
+	{
+		FiltSum=0;
+		
+		for (int f = 1; f<=lenF; f++)
+		{
+			FiltSum+=FIR_down(f)*timeseries->operator()(i+f);
+			//  std::cout<<"FIR_down_shift("<<f<<"):\t"<<FIR_down_shift(f)<<std::endl;
+			//  std::cout<<"timeseries("<<i+f<<"):\t"<<timeseries->operator()(i+f)<<std::endl;
+			//  std::cout<<"Product:\t"<<FIR_down_shift(f)*timeseries->operator()(i+f)<<std::endl;
+			//  std::cout<<"Running Sum:\t"<<FiltSum<<std::endl;
+		}
+		
+		filtered(i+Tstart)=FiltSum;
+		
+		
+	}
+	
+	ColumnVector filtered2;
+	filtered=filtered.Reverse();
+	filtered2=filtered;
+	
+	for (int i = 0; i<maxT; i++)
+	{
+		FiltSum=0;
+		
+		for (int f = 1; f<=lenF; f++)
+		{
+			FiltSum+=FIR_down(f)*filtered(i+f);
+		}
+		
+		filtered2(i+startT)=FiltSum;
+		
+		
+	}
+	filtered2=filtered2.Reverse();
+	
+	
+	for (int i = 0; i<maxT; i++)
+	{
+		FiltSum=0;
+		
+		for (int f = 1; f<=lenF; f++)
+		{
+			FiltSum+=FIR_down_shift(f)*filtered2(i+f);
+			//  std::cout<<"FIR_down_shift("<<f<<"):\t"<<FIR_down_shift(f)<<std::endl;
+			//  std::cout<<"timeseries("<<i+f<<"):\t"<<timeseries->operator()(i+f)<<std::endl;
+			//  std::cout<<"Product:\t"<<FIR_down_shift(f)*timeseries->operator()(i+f)<<std::endl;
+			//  std::cout<<"Running Sum:\t"<<FiltSum<<std::endl;
+		}
+		
+		filtered(i+Tstart)=FiltSum;
+		
+		
+	}
+	//filtered=filtered.Reverse();
+	//ColumnVector filtered2=filtered;
+	//
+	//for (int i = 0; i< SamplePoints.size(); i++)
+	//{
+	//	FIR_down_shift(i+1)=FIR->operator[](SamplePoints[i]);		
+	//}
+	//
+	//for (int i = 0; i<maxT; i++)
+	//{
+	//	FiltSum=0;
+	//	
+	//	for (int f = 1; f<=lenF; f++)
+	//	{
+	//		FiltSum+=FIR_down_shift(f)*filtered(i+f);
+	//	}
+	//	
+	//	filtered2(i+startT)=FiltSum;
+	//	
+	//	
+	//}
+	//
+	//*timeseries=filtered2.Reverse();
+	
+	*timeseries=filtered;
+		
+	
+	//std::cout<<"Finished"<<std::endl;
+
+	
+	
+}
 
 void make_timings(Matrix *timings, Matrix *orders, int zs)
 {
@@ -222,6 +470,7 @@ int shift_volume()
 	volume4D<float> timeseries;
 	Matrix timings;
 	Matrix orders;
+	std::vector<float> FIR;
 	
   if (input.set()) {
 	if (true) { cout << "Reading input volume" << endl; }
@@ -239,92 +488,155 @@ int shift_volume()
 	orders.ReSize(timeseries.zsize(),1);	
 	make_timings(&timings,&orders,timeseries.zsize());
 	
-	//std::cout<<"TimingFile:"<<std::endl;
-	//for (int i=1;i<=timeseries.zsize();i++)
-	//{
-	//	std::cout<<timings(i,1)<<std::endl;
-	//}
-	//std::cout<<"OrderFile:"<<std::endl;
-	//for (int i=1;i<=timeseries.zsize();i++)
-	//{
-	//	std::cout<<orders(i,1)<<std::endl;
-	//}
+	std::cout<<"TimingFile:"<<std::endl;
+	for (int i=1;i<=timeseries.zsize();i++)
+	{
+		std::cout<<timings(i,1)<<std::endl;
+	}
+	std::cout<<"OrderFile:"<<std::endl;
+	for (int i=1;i<=timeseries.zsize();i++)
+	{
+		std::cout<<orders(i,1)<<std::endl;
+	}
 	
 	int no_volumes = timeseries.tsize();
 	int xx = timeseries.xsize();
 	int yy = timeseries.ysize();
 	int zz = timeseries.zsize();
 	std::cout<<xx<<std::endl;
-	volume4D<float> filterseries(xx,yy,zz,no_volumes*2-2);
 	
 	
 	
 	// Test Window Function
 	float cutoff=0.2;
-	int samplingrate=20;
+	float samplingrate=(float) zz/TR.value();
 	float stopgain=-60;
 	float transwidth=.08;
 	
-	//window::window kaiser(cutoff,samplingrate,stopgain,transwidth);
-	//kaiser.print_info();
-	//kaiser.get_fir();
+	window::window kaiser(cutoff,samplingrate,stopgain,transwidth);
+	FIR=kaiser.get_fir();
+	kaiser.print_info();
+
+	// Do padding calculations once outside of loop
 	
+	ColumnVector voxeltimeseries = timeseries.voxelts(1,1,1);
+	ColumnVector fliptimeseries = voxeltimeseries.Reverse();
+	ColumnVector cattimeseries;
+	
+	fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);
+	
+	int lents=fliptimeseries.Nrows();
+	int rangelh;
+	int rangerh;
+	
+	if ( lents % 2 == 0 )
+	{
+		rangelh=lents/2;
+		rangerh=lents/2-1;
+		
+		
+	}
+	else
+	{
+		rangelh=ceil(lents/2);
+		rangerh=floor(lents/2);
+	}
+	
+	int cutLeft = lents-rangelh+3;
+	int cutRight = cutLeft+no_volumes-1;
+	std::cout<<cutLeft<<std::endl;
+	std::cout<<cutRight<<std::endl;
+	if (cutRight-cutLeft != no_volumes-1)
+	{
+		return 1;
+	}
+	//ColumnVector V1;
+	//V1.ReSize(5);
+	//ColumnVector V2;
+	//V2.ReSize(5);
+	//V1(1)=3.0;	V1(2)=10.0;	V1(3)=5;	V1(4)=1.0;	V1(5)=6.0;
+	//V2(1)=2.0;	V2(2)=2.0;	V2(3)=3;	V2(4)=2.0;	V2(5)=3.0;
+	//
+	//std::cout<<"V1:"<<std::endl;
+	//std::cout<< V1 <<std::endl;
+	//std::cout<<"V2:"<<std::endl;
+	//std::cout<<V2<<std::endl;
+	//
+	//ColumnVector V3;
+	//V3.ReSize(5);
+	//V3=MultipliedMatrix(V1,V2);
+	//std::cout<<"V3:"<<std::endl;
+	//std::cout<<V1<<std::endl;
 	
 	for (int slice=1; slice<=zz; slice++) {
-	
+		std::cout<<"Slice: "<<slice<<std::endl;
+		std::cout<<"Shift: "<<timings(slice,1)*samplingrate<<std::endl;
+		
 		for (int x_pos = 0; x_pos < xx; x_pos++)
 		{
 			for (int y_pos = 0; y_pos < yy; y_pos++)
 			{
 		
-				ColumnVector voxeltimeseries = timeseries.voxelts(x_pos,y_pos,slice-1);
-				ColumnVector fliptimeseries=voxeltimeseries.Reverse();
-				
-				//std::cout<<"\n\n"<<std::endl;
-				//std::cout<<voxeltimeseries(199)<<std::endl;
-				//std::cout<<voxeltimeseries(200)<<std::endl;
-				
+				voxeltimeseries = timeseries.voxelts(x_pos,y_pos,slice-1);
+				fliptimeseries = voxeltimeseries.Reverse();
 				fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);
 				
-				int lents=fliptimeseries.Nrows();
-				int rangelh;
-				int rangerh;
-				
-				if ( lents % 2 == 0 )
-				{
-					rangelh=no_volumes-lents/2-2;
-					rangerh=lents/2-1;
-					
-					
-				}
-				else
-				{
-					rangelh=no_volumes-floor(lents/2)-2;
-					rangerh=ceil(lents/2);
-				}
 				
 				//std::cout<<"Catting File"<<std::endl;
-				//
 				//std::cout << "rangelh: " << rangelh << std::endl;
 				//std::cout << "no_volumes: " << no_volumes << std::endl;
 				//std::cout << "rangerh: " << rangerh << std::endl;
 				//std::cout << "fliptimeseres.Nrows: " << fliptimeseries.Nrows() << std::endl;
 				//std::cout << "rangelh: " << rangelh << std::endl;
-				//
-				//
-				//ColumnVector cattimeseries=fliptimeseries.Rows(rangelh,no_volumes-2)&voxeltimeseries&fliptimeseries.Rows(1,rangerh);
-				//
-				//std::cout << "Len cattimeseries: " << cattimeseries.Nrows() << std::endl;
-				//std::cout << "Len filterseries: " << filterseries.tsize() << std::endl;
-				//std::cout << "mint filterseries: " << filterseries.mint() << std::endl;
-				//std::cout << "maxt filterseries: " << filterseries.maxt() << std::endl;
+
 				
-				//std::cout<<"Writing File"<<std::endl;
-				//
+				cattimeseries=fliptimeseries.Rows(rangelh,lents)&voxeltimeseries&fliptimeseries.Rows(1,rangerh);
 				//write_ascii_matrix(cattimeseries,"/home/dparker/Desktop/MyOutput/FiltershiftTest/testTS.txt", 16);
 				//std::cout<<"WroteFile"<<std::endl;
 				//return 1;
-				filterseries.setvoxelts(cattimeseries,x_pos,y_pos,slice-1);
+				filter_timeseries(&cattimeseries, &FIR, timings(slice,1)*samplingrate,zz,slice);
+				
+				
+				
+				cattimeseries=cattimeseries.Rows(cutLeft,cutRight);
+				
+				//std::cout << "Len cattimeseries: " << cattimeseries.Nrows() << std::endl;
+				//
+				//std::cout<<"Writing File"<<std::endl;				
+				//write_ascii_matrix(cattimeseries,"/home/dparker/Desktop/MyOutput/FiltershiftTest/testTS.txt", 16);
+				//std::cout<<"WroteFile"<<std::endl;
+				//return 1;
+				//
+				timeseries.setvoxelts(cattimeseries,x_pos,y_pos,slice-1);
+				
+				
+				
+				//////////////////////////////////////////////////////////////
+				/////////////////////////////////////////////////////////////
+				//
+				//
+				//   ^^^^    APPEARS TO BE A CUT PROBLEM NOW ^^^^
+				//
+				//
+				//
+				//
+				//////////////////////////////////////////////////////////////
+				/////////////////////////////////////////////////////////////
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
 				
 				
 				
@@ -348,7 +660,7 @@ int shift_volume()
 		}
 	}
 	
-	write_volume4D(filterseries,"/home/dparker/Desktop/MyOutput/FiltershiftTest/FiltSeries.nii");
+	write_volume4D(timeseries,"/home/dparker/Desktop/MyOutput/FiltershiftTest/SimSub/FiltSeries.nii");
 		//std::cout<<flipseries(1,1)<<std::endl;
 		//std::cout<<flipseries(1,1000)<<std::endl;
 		

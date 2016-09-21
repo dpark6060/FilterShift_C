@@ -25,10 +25,10 @@ using namespace MISCMATHS;
 
 window::window():PI(3.14159265359){
     
-    cutoff=0;
-    SamplingRate=0;
-    StopGain=0;
-    TranWidth=0;
+    cutoff=0.0;
+    SamplingRate=0.0;
+    StopGain=0.0;
+    TranWidth=0.0;
     Nyq=SamplingRate/2.0;
     N=1;
     beta=0;
@@ -36,7 +36,7 @@ window::window():PI(3.14159265359){
     
 }
 
-window::window(float co, int sr, float sg, float tw):cutoff(co),SamplingRate(sr),StopGain(sg),TranWidth(tw),PI(3.14159265359)
+window::window(float co, float sr, float sg, float tw):cutoff(co),SamplingRate(sr),StopGain(sg),TranWidth(tw),PI(3.14159265359)
 {
     
     Nyq=SamplingRate/2.0;
@@ -174,9 +174,10 @@ std::vector<float> window::get_fir(){
         FIR[i]=FIR[i]/s;
     }
     
+
     
     
-    std::ofstream output_file("/home/dparker/Desktop/FIRtest.txt");
+    std::ofstream output_file("/home/dparker/Desktop/MyOutput/FiltershiftTest/FIRtest.txt");
     output_file.precision(32);
     std::ostream_iterator<float> output_iterator(output_file,"\n");
     std::copy(FIR.begin(),FIR.end(),output_iterator);
