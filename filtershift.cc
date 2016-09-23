@@ -102,7 +102,7 @@ Option<bool> force(string("--force"), false,
 
 void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int shift,int skip,int slice)
 {
-	//std::cout<<"This Function"<<std::endl;
+	//std::cout<<"Shift in filter:"<<shift<<std::endl;
 	
 
 	
@@ -138,8 +138,10 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 	}
 
 	std::vector<int> SamplePoints;
+	
 	//SamplePoints.reserve((int) ceil(lenF/skip));
 	//std::cout<<"resamp"<<std::endl;
+	
 	for (int i = mxi; i>=0; i-=skip)
 	{
 		SamplePoints.insert(SamplePoints.begin(),i);
@@ -191,8 +193,10 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 		padd.assign(std::abs(shift),pFIR.front());
 		//std::cout<<"Finished"<<std::endl;
 		//std::cout<<"Insert padd"<<std::endl;
-		pFIR.insert(pFIR.begin(),padd.begin(),padd.end());
+		padd.insert(padd.end(),pFIR.begin(),pFIR.end());
+		pFIR=padd;
 		//std::cout<<"Finished padd"<<std::endl;
+		
 		ModSample=0;
 		
 	}	
@@ -223,20 +227,21 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 	//Output+=Convert.str();
 	//Output+=".txt";
 	//write_ascii_matrix(FIR_down_shift,Output.c_str(), 16);
-	
+	//
 //	std::ofstream output_file(Output.c_str());
 //    output_file.precision(32);
 //    std::ostream_iterator<float> output_iterator(output_file,"\n");
 //    std::copy(FIR_down_shift.begin(),FIR_down_shift.end(),output_iterator);
 	
-//	Output="/home/dparker/Desktop/MyOutput/FiltershiftTest/SamplePoints_";
-//	Output+=Convert.str();
-//	Output+=".txt";
+	//Output="/home/dparker/Desktop/MyOutput/FiltershiftTest/SamplePoints_";
+	//Output+=Convert.str();
+	//Output+=".txt";
+	
 //	std::ofstream output_file(Output.c_str());
 //    output_file.precision(32);
 //    std::ostream_iterator<float> output_iterator(output_file,"\n");
-//    std::copy(SamplePoints.begin(),SamplePoints.end(),output_iterator);
-	
+//    std::copy(FIR_down_shift.begin(),FIR_down_shift.end(),output_iterator);
+//	
 	
 	//std::cout<<"Lenf:\t"<<lenF<<std::endl;
 	
@@ -350,7 +355,20 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 {
 	if ( timing.set() )
 	{
-
+		
+		
+		if ref.set()
+		{
+			std::cout<<"When using a Slice Timing file, the times in the file supercede all other settings.  The reference slice specified will be ignored"<<std::endl;
+			std::cout<<"If you wish to alighn data to a specific slice, please make that adjustment in the Slice Timing File, or omit the slice timing file."<<std::endl;
+			std::cout<<"Or use a Slice ORDER file, and specify a reference slice that way.  There's one clear option here that involves the least amount of work."<<std::endl;
+		}
+		// Slice Timing File, deftault Reference Slice, Tested 9/22/16 - Shifting Success, Slice Order Not
+		// Slice Timing File, Custom Reference Slice, Tested 9/22/16 - Shifting Success, Slice Order Not.
+		// Slice Order is Unnecessary, removing 9/23/16
+		
+		// Need To Test With Multiband Images
+		
 		Matrix TempTimings;
 		TempTimings.ReSize(zs,1);
 		float tmn;
@@ -367,32 +385,39 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		
 		
 		TempTimings = read_ascii_matrix(timing.value(), zs, 1);
-		
-		std::cout<<TempTimings<<std::endl;
-		tmx=TempTimings.Maximum();
-		
-		
-		for ( int i=1; i<=zs; i++ )
+		if (timings->Nrows()!=zs)
 		{
-			tmn=Minimum(TempTimings);
-
-			if ( tmn >tmx )
-			{
-				break;
-			}
-			
-			for ( int j=1;j<=zs; j++ )
-			{
-				std::cout<<"timings("<<j<<") = "<<timings->operator()(j,1)<<std::endl;
-				
-				if ((float) timings->operator()(j,1)==tmn)
-				{
-					orders->operator()(j,1)=i;					
-					TempTimings(j,1)=tmx*2;
-					std::cout<<TempTimings<<std::endl;
-				}
-			}
+			std::cout<<"Slice timing file does not have the correct number of slices"<<std::endl;
+			return;
 		}
+		
+		// 9/23/16 - removed code that calculated slice order - it's wrong and unnecessary
+		
+		//std::cout<<TempTimings<<std::endl;
+		//tmx=TempTimings.Maximum();
+		//
+		//
+		//for ( int i=1; i<=zs; i++ )
+		//{
+		//	tmn=Minimum(TempTimings);
+		//
+		//	if ( tmn >tmx )
+		//	{
+		//		break;
+		//	}
+		//	
+		//	for ( int j=1;j<=zs; j++ )
+		//	{
+		//		std::cout<<"timings("<<j<<") = "<<timings->operator()(j,1)<<std::endl;
+		//		
+		//		if ((float) timings->operator()(j,1)==tmn)
+		//		{
+		//			orders->operator()(j,1)=i;					
+		//			TempTimings(j,1)=tmx*2;
+		//			std::cout<<TempTimings<<std::endl;
+		//		}
+		//	}
+		//}
 		
 		
 		
@@ -400,6 +425,11 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 	}	
 	else if ( order.set() )
 	{
+		//Slice Order File, Default Reference Slice Tested 9/23/16 - Passed
+		//Slice Order File, Custom Reference Slice Tested 9/23 - Passed
+		
+		// 9/23/16 - Will not Run With Multiband, only slice timing file (User Burden, Deal With It)
+		
 		std::cout<<"Order File"<<std::endl;
 		int tmx;
 		float shift;
@@ -414,14 +444,27 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 			return;
 		}
 		
-		
-		orders->operator-=(1);
-		tmx=orders->Maximum();
-		shift=(TR.value()*1.0/zs);
+		if (orders->Nrows()!=zs)
+		{
+			std::cout<<"Slice order file does not have the correct number of slices"<<std::endl;
+			return;
+		}
+		Matrix TimeList;
+		TimeList.ReSize(tmx,1);		
+		shift=TR.value()*1.0/tmx;
+
 		for ( int i=1; i<=zs; i++ )
 		{
-			timings->operator()(i,1)=orders->operator()(i,1)*shift;
+			TimeList(i,1)=(float) (i-1)*shift;
 		}
+		
+		
+		// 9/23/16 - Made This loop more efficient
+		for (int j=1;j<=zs;j++)
+		{			
+			timings->operator()(orders->operator()(j,1),1)=TimeList(j,1);					
+		}
+		
 		
 		std::cout<<ref.value()<<std::endl;
 		timings->operator-=(timings->operator()(ref.value(),1));
@@ -429,6 +472,9 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 	}
 	else
 	{
+		// Create Timing File Tested 9/22/16 - Succesful
+		// With Reference Tested 9/22/16 - Succesful
+		
 		float dt;
 		Matrix IntSeq;
 		Matrix TimeList;
@@ -437,6 +483,7 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		dt=TR.value()/zs;
 		int counter;
 		counter=1;
+		
 		
 		for ( int i=0; abs(i)<interleave.value(); i=i+1*direction.value() )
 		{
@@ -460,8 +507,6 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 
 	}
 	
-	
-	
 }
 
 
@@ -475,29 +520,32 @@ int shift_volume()
   if (input.set()) {
 	if (true) { cout << "Reading input volume" << endl; }
 	read_volume4D(timeseries,input.value());
-	if (!out.set())
-	  out.set_value(input.value() + "_st");
+
   } else if (out.set()) {
 	cerr << "Must specify an input volume (-i or --in) to generate corrected data." 
 	 << endl;
 	return -1;
   }
   
-	std::cout<<"Read Succesful"<<std::endl;
+	
+	//std::cout<<"Read Succesful"<<std::endl;
+	
 	timings.ReSize(timeseries.zsize(),1);
 	orders.ReSize(timeseries.zsize(),1);	
 	make_timings(&timings,&orders,timeseries.zsize());
 	
-	std::cout<<"TimingFile:"<<std::endl;
-	for (int i=1;i<=timeseries.zsize();i++)
-	{
-		std::cout<<timings(i,1)<<std::endl;
-	}
-	std::cout<<"OrderFile:"<<std::endl;
-	for (int i=1;i<=timeseries.zsize();i++)
-	{
-		std::cout<<orders(i,1)<<std::endl;
-	}
+	//std::cout<<"orderNrows"<<orders.Nrows()<<std::endl;
+	//std::cout<<"TimingFile:"<<std::endl;
+	//for (int i=1;i<=timeseries.zsize();i++)
+	//{
+	//	std::cout<<timings(i,1)<<std::endl;
+	//}
+	//std::cout<<"OrderFile:"<<std::endl;
+	//for (int i=1;i<=timeseries.zsize();i++)
+	//{
+	//	std::cout<<orders(i,1)<<std::endl;
+	//}
+	//
 	
 	int no_volumes = timeseries.tsize();
 	int xx = timeseries.xsize();
@@ -550,6 +598,7 @@ int shift_volume()
 	{
 		return 1;
 	}
+	
 	//ColumnVector V1;
 	//V1.ReSize(5);
 	//ColumnVector V2;
@@ -569,8 +618,9 @@ int shift_volume()
 	//std::cout<<V1<<std::endl;
 	
 	for (int slice=1; slice<=zz; slice++) {
-		std::cout<<"Slice: "<<slice<<std::endl;
-		std::cout<<"Shift: "<<timings(slice,1)*samplingrate<<std::endl;
+		//std::cout<<"Slice: "<<slice<<std::endl;
+		//std::cout<<"delay: "<<timings(slice,1)<<std::endl;
+		//std::cout<<"Shift: "<<timings(slice,1)*samplingrate<<std::endl;
 		
 		for (int x_pos = 0; x_pos < xx; x_pos++)
 		{
@@ -608,38 +658,7 @@ int shift_volume()
 				//return 1;
 				//
 				timeseries.setvoxelts(cattimeseries,x_pos,y_pos,slice-1);
-				
-				
-				
-				//////////////////////////////////////////////////////////////
-				/////////////////////////////////////////////////////////////
-				//
-				//
-				//   ^^^^    APPEARS TO BE A CUT PROBLEM NOW ^^^^
-				//
-				//
-				//
-				//
-				//////////////////////////////////////////////////////////////
-				/////////////////////////////////////////////////////////////
-				
-				
-				
-				
-				
-				
-				
-				
-				
-				
-				
-				
-				
-				
-				
-				
-				
-				
+	
 				//std::cout<<voxeltimeseries.Nrows()<<std::endl;
 				//std::cout<<voxeltimeseries(197)<<std::endl;
 				//std::cout<<voxeltimeseries(198)<<std::endl;
@@ -660,7 +679,7 @@ int shift_volume()
 		}
 	}
 	
-	write_volume4D(timeseries,"/home/dparker/Desktop/MyOutput/FiltershiftTest/SimSub/FiltSeries.nii");
+	write_volume4D(timeseries,out.value());
 		//std::cout<<flipseries(1,1)<<std::endl;
 		//std::cout<<flipseries(1,1000)<<std::endl;
 		
@@ -731,6 +750,26 @@ int main (int argc,char** argv)
 	cerr << e.what() << endl;
   } 
 
+  if (!out.set())
+  {
+	string InputFile=input.value();
+	string filename=InputFile.substr(InputFile.find_last_of( '/' ) + 1 );
+	string::size_type n = filename.find_last_of('.');
+	string directory=InputFile.substr(0,InputFile.find_last_of('/')+1);
+	std::cout<<"filename: "<<filename<<std::endl;
+	std::cout<<"directory: "<<directory<<std::endl;
+	std::cout<<"n: "<<n<<std::endl;
+	std::cout<<"Removing Extension"<<std::endl;
+	while (n!=string::npos)
+	{
+		filename=filename.substr(0,n);
+		std::cout<<"filename: "<<filename<<std::endl;
+		n=filename.find_last_of('.');
+		std::cout<<"n: "<<n<<std::endl;
+	}
+	  out.set_value(directory+filename+ "_st.nii.gz");			
+  }
+  
   int retval = shift_volume();
   
   if (retval!=0) {
