@@ -273,7 +273,7 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 	{
 		
 		
-		if ref.set()
+		if ( ref.set() )
 		{
 			std::cout<<"When using a Slice Timing file, the times in the file supercede all other settings.  The reference slice specified will be ignored"<<std::endl;
 			std::cout<<"If you wish to alighn data to a specific slice, please make that adjustment in the Slice Timing File, or omit the slice timing file."<<std::endl;
@@ -427,8 +427,8 @@ int shift_volume()
 	
 	float cutoff=0.2;
 	float samplingrate=(float) zz/TR.value();
-	float stopgain=-60;
-	float transwidth=.08;
+	float stopgain=-20;
+	float transwidth=.1;
 	
 	window::window kaiser(cutoff,samplingrate,stopgain,transwidth);
 	FIR=kaiser.get_fir();
