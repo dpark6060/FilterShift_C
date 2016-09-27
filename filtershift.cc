@@ -388,6 +388,10 @@ int shift_volume()
 		return 1;
 	}
 
+	float span;
+	float mn;
+	float mn2;
+	float span2;
 	
 	for (int slice=1; slice<=zz; slice++)
 	{		
@@ -398,12 +402,28 @@ int shift_volume()
 			for (int y_pos = 0; y_pos < yy; y_pos++)
 			{
 				voxeltimeseries = timeseries.voxelts(x_pos,y_pos,slice-1);
-				fliptimeseries = voxeltimeseries.Reverse();
-				fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);				
-				cattimeseries=fliptimeseries.Rows(rangelh,lents)&voxeltimeseries&fliptimeseries.Rows(1,rangerh);				
-				filter_timeseries(&cattimeseries, &FIR, (int)floor(timings(slice,1)*(float)samplingrate+0.5),zz,slice);
-				cattimeseries=cattimeseries.Rows(cutLeft,cutRight);
-				timeseries.setvoxelts(cattimeseries,x_pos,y_pos,slice-1);
+				mn=voxeltimeseries.Sum()/voxeltimeseries.Nrows();
+				voxeltimeseries-=(mn);
+				span=voxeltimeseries.Maximum()-voxeltimeseries.Minimum();
+				
+				// 9/27/16 - Filter changes mean and span - added code to maintain mean and span.
+				// Also checks to see if the span is zero.  If so, do not filter.
+				
+				if ( span!=0 )
+				{
+					fliptimeseries = voxeltimeseries.Reverse();
+					fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);				
+					cattimeseries=fliptimeseries.Rows(rangelh,lents)&voxeltimeseries&fliptimeseries.Rows(1,rangerh);				
+					filter_timeseries(&cattimeseries, &FIR, (int)floor(timings(slice,1)*(float)samplingrate+0.5),zz,slice);
+					cattimeseries=cattimeseries.Rows(cutLeft,cutRight);
+					mn2=cattimeseries.Sum()/cattimeseries.Nrows();
+					cattimeseries-=(mn2);
+					span2=cattimeseries.Maximum()-cattimeseries.Minimum();
+					cattimeseries/=span2;
+					cattimeseries*=span;
+					cattimeseries+=mn;					
+					timeseries.setvoxelts(cattimeseries,x_pos,y_pos,slice-1);
+				}
 	
 			}
 		}
