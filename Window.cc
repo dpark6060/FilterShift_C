@@ -36,7 +36,7 @@ window::window():PI(3.14159265359){
     
 }
 
-window::window(float co, float sr, float sg, float tw):cutoff(co),SamplingRate(sr),StopGain(sg),TranWidth(tw),PI(3.14159265359)
+window::window(float co, float sr, float sg, double tw):cutoff(co),SamplingRate(sr),StopGain(sg),TranWidth(tw),PI(3.14159265359)
 {
     
     Nyq=SamplingRate/2.0;
@@ -168,19 +168,12 @@ std::vector<float> window::get_fir(){
         FIR[i]=h[i]*bessi((int) 0,(double) beta*sqrt(1-pow(static_cast<float>((i-alpha)/alpha),2.0)))/bessi(0,beta);
         s+=FIR[i]*c[i];
     }
-    std::cout << s << std::endl;
+    
     for (int i=0;i<N;i++)
     {
         FIR[i]=FIR[i]/s;
     }
-    
 
-    
-    
-    std::ofstream output_file("/home/dparker/Desktop/MyOutput/FiltershiftTest/FIRtest.txt");
-    output_file.precision(32);
-    std::ostream_iterator<float> output_iterator(output_file,"\n");
-    std::copy(FIR.begin(),FIR.end(),output_iterator);
     
     return FIR;
 }

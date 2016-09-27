@@ -6,7 +6,8 @@
 #include <string>
 #include <sstream>
 #include <vector>
-
+#include <sys/stat.h>
+#include <unistd.h>
 
 
 #include "miscmaths/optimise.h"
@@ -65,6 +66,10 @@ Option<string> order(string("--order"), string(""),
 					\n\t\t\t\t\t we refer to the bottom slice in the image as slice 1, not slice 0\n"),
 			 false, requires_argument);
 
+Option<float> lpf(string("--lpf"),0,
+				  string("\tSet the cutoff frequency of the lowpass filter in Hz.  \n\t\t\t\t\tNote that by default, this is set to include 80% of the total availible bandwidth.\n"),
+				  false,requires_argument);
+
 Option<string> timing(string("--timing"), string(""),
 			 string("\tSlice Timing File.  This file is the time at which each slice was acquired relative to the first slice. each row represents the time at which that slice was acquired.\
 \n\t\t\t\t\t For example, '0' in the first row means that slice 1 was aquired first, and will be shifted 0 seconds.  '0.5' in the second row\
@@ -74,103 +79,56 @@ Option<string> timing(string("--timing"), string(""),
 			 false, requires_argument);
 
 Option<int> ref(string("-r,--reference"), 1,
-			 string("\tSet the Reference slice\n\tThis is the slice the data is aligned to.  Default is the first slice\n"),
+			 string("\tSet the Reference slice\n\t\t\t\t\tThis is the slice the data is aligned to.  Default is the first slice\n"),
 			 false, requires_argument);
-			  
-Option<int> cores(string("-c,--cores"), 1,
-			 string("\tthe number of cores free on your computer for parallel processing.  The default is one less than the number of cores your computer has.\
-					\n\t\t\tIt is highly recommended that you use parallel processing to speed up this operation\n"),
-			 false, requires_argument);
-
-Option<float> mem(string("-m,--mem"), 4.0,
-			 string("\tamount of free memory you have, in GB, so the system knows how much load it can give each core. The default is 4\n"),
-			 false, requires_argument);
-			  
-Option<bool> force(string("--force"), false,
-			 string("\tForces the program to proceed even if it estimates a memory error, or if it detects that STC has already been run.  Use -force if you need to re-run with new parameters\
-					\n\t\t\t\t\tWARNING: THIS CAN POTENTIALLY CRASH YOUR COMPUTER\n\n\n"),
-			 false, no_argument);              
-			
-			
+			      
   Option<bool> help(string("-h,--help"), false,
 		  string("\tdisplay this message\n"),
 		  false, no_argument);
 
 
-
+inline bool exists_test3 (const std::string& name) {
+  struct stat buffer;   
+  return (stat (name.c_str(), &buffer) == 0); 
+}
 
 
 void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int shift,int skip,int slice)
 {
 	
-
+// 		9/27/16 - modified Kaiser Window resampling algorithm and convolution filtering routine.
+// 		Now matches output from old code almost perfectly (10e-3 error)
 	
-//	    if shift>0:
-//    # If the shift is larger than zero
-//    # Extend the Upsampled signal by repeating the values at the beginning of the signal by the shift amount
-//    # then resample the signal, starting at index 0, every S indecies, to one S of the end
-//            Rep=np.tile(ZeroSig[0],shift)
-//            ZeroSig=np.append(Rep,ZeroSig,-1)
-//            Sig=ZeroSig[range(0,ZeroSig.shape[-1]-S,S)]       
-//    
-//        else:
-//    # If the Shift is less than zero
-//    # Extend the Upsampled signal by repeating the values at the end of the signal by the shift amount
-//    # Then resample the signal, starting at index shift, every s indicies, to the end
-//            Rep=np.tile(ZeroSig[-1],abs(shift))
-//            ZeroSig=np.append(ZeroSig,Rep,-1)
-//            Sig=ZeroSig[range(int(abs(shift)),ZeroSig.shape[-1]-1,S)]
 
 	int lenT = timeseries->Nrows();
 	int lenF = FIR->size();
-	int center=ceil(lenF/2);
-	float mx=-100;
-	int mxi=0;
 	
-	for (int i=center-5;i<center+5;i++)
+	if ( lenF/skip >= lenT )
 	{
-		if (FIR->operator[](i)>mx)
-		{
-			mx=FIR->operator[](i);
-			mxi=i;
-		}
+		std::cout<<"Filter Order too high.  There aren't enough time points in your image."<< std::endl;
+		return;
 	}
-
+		
 	std::vector<int> SamplePoints;
 	
-	for (int i = mxi; i>=0; i-=skip)
-	{
-		SamplePoints.insert(SamplePoints.begin(),i);
-	}
-	int Tstart=SamplePoints.size();
-	for (int i = mxi+skip;i<lenF;i+=skip)
+	for (int i=1;i<=lenF-skip;i+=skip)
 	{
 		SamplePoints.insert(SamplePoints.end(),i);
 	}
+	
 	int firLen=SamplePoints.size();	
-	
-	
-	
-	
-	// If the shift if positive (shifting the signal to the right), then we want to DELAY the filter, add zeros to the END (Right hand side)	
 	std::vector<float> pFIR;
 	pFIR.assign(FIR->begin(),FIR->end());
 	std::vector<float> padd;
-	padd.reserve(std::abs(shift));
-
-	
-	
-	
-	
+	padd.reserve(std::abs(shift));	
 	int ModSample=0;
 	
-	
+	// If the shift if positive (shifting the signal to the right), then we want to DELAY the filter, add zeros to the END (Right hand side)		
 	if (shift>0)
 	{
 
 		padd.assign(std::abs(shift),pFIR.back());
 		pFIR.insert (pFIR.end(),padd.begin(),padd.end());
-
 		ModSample=shift;
 	}
 	
@@ -185,14 +143,13 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 		
 	}	
 	
-	
 	ColumnVector FIR_down_shift;
 	ColumnVector FIR_down;
 	FIR_down_shift.ReSize(firLen);
 	FIR_down.ReSize(firLen);
-	lenF=FIR_down_shift.Nrows();
-	
+	lenF=FIR_down_shift.Nrows();	
 	firLen=1;
+	
 	for (int i = 0; i< SamplePoints.size(); i++)
 	{
 		FIR_down(firLen)=FIR->operator[](SamplePoints[i]);
@@ -200,34 +157,25 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 		FIR_down_shift(firLen)=pFIR[SamplePoints[i]];
 		firLen+=1;
 	}
-	
-	
-	if ( lenF >= lenT )
-	{
-		std::cout<<"Filter Order too high"<< std::endl;
-		return;
-	}
 
-	
 	ColumnVector filtered;
-	filtered.ReSize(lenT);
-	
+	filtered.ReSize(lenT);	
 	int startT = floor(lenF/2);	
-	int maxT = lenT-lenF;
+	int maxT = lenT-lenF-1;
 	float FiltSum=0;
+
 	for (int i = 0; i<maxT; i++)
 	{
 		FiltSum=0;
-		
+
 		for (int f = 1; f<=lenF; f++)
 		{
-			FiltSum+=FIR_down(f)*timeseries->operator()(i+f);
+			FiltSum+=FIR_down_shift(f)*timeseries->operator()(i+f);
 		}
 		
-		filtered(i+Tstart)=FiltSum;
-		
+		filtered(i+startT)=FiltSum;		
 	}
-	
+
 	ColumnVector filtered2;
 	filtered=filtered.Reverse();
 	filtered2=filtered;
@@ -242,36 +190,16 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 		}
 		
 		filtered2(i+startT)=FiltSum;
-		
-		
-	}
-	filtered2=filtered2.Reverse();
-	
-	for (int i = 0; i<maxT; i++)
-	{
-		FiltSum=0;
-		
-		for (int f = 1; f<=lenF; f++)
-		{
-			FiltSum+=FIR_down_shift(f)*filtered2(i+f);
-		}
-		
-		filtered(i+Tstart)=FiltSum;
-		
-		
 	}
 	
+	filtered=filtered2.Reverse();
 	*timeseries=filtered;
-
-	
-	
 }
 
 void make_timings(Matrix *timings, Matrix *orders, int zs)
 {
 	if ( timing.set() )
 	{
-		
 		
 		if ( ref.set() )
 		{
@@ -315,11 +243,9 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 	else if ( order.set() )
 	{
 		//Slice Order File, Default Reference Slice Tested 9/23/16 - Passed
-		//Slice Order File, Custom Reference Slice Tested 9/23 - Passed
-		
+		//Slice Order File, Custom Reference Slice Tested 9/23 - Passed		
 		// 9/23/16 - Will not Run With Multiband, only slice timing file (User Burden, Deal With It)
 		
-		std::cout<<"Order File"<<std::endl;
 		int tmx;
 		float shift;
 		
@@ -347,15 +273,14 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 			TimeList(i,1)=(float) (i-1)*shift;
 		}
 		
-		
 		// 9/23/16 - Made This loop more efficient
+		
 		for (int j=1;j<=zs;j++)
 		{			
 			timings->operator()(orders->operator()(j,1),1)=TimeList(j,1);					
 		}
 		
 		
-		std::cout<<ref.value()<<std::endl;
 		timings->operator-=(timings->operator()(ref.value(),1));
 		
 	}
@@ -405,30 +330,30 @@ int shift_volume()
 	Matrix orders;
 	std::vector<float> FIR;
 	
-  if (input.set()) {
+  if (input.set())
+  {
+	
 	if (true) { cout << "Reading input volume" << endl; }
 	read_volume4D(timeseries,input.value());
 
   } else if (out.set()) {
-	cerr << "Must specify an input volume (-i or --in) to generate corrected data." 
-	 << endl;
+	cerr << "Must specify an input volume (-i or --in) to generate corrected data." << endl;
 	return -1;
   }
   	
 	timings.ReSize(timeseries.zsize(),1);
 	orders.ReSize(timeseries.zsize(),1);	
-	make_timings(&timings,&orders,timeseries.zsize());
+	make_timings(&timings,&orders,timeseries.zsize());	
 	
 	int no_volumes = timeseries.tsize();
 	int xx = timeseries.xsize();
 	int yy = timeseries.ysize();
 	int zz = timeseries.zsize();
-	std::cout<<xx<<std::endl;
 	
-	float cutoff=0.2;
+	float cutoff=lpf.value();
 	float samplingrate=(float) zz/TR.value();
 	float stopgain=-20;
-	float transwidth=.1;
+	double transwidth=.1;
 	
 	window::window kaiser(cutoff,samplingrate,stopgain,transwidth);
 	FIR=kaiser.get_fir();
@@ -448,16 +373,15 @@ int shift_volume()
 		rangelh=lents/2;
 		rangerh=lents/2-1;		
 	}
+	
 	else
 	{
 		rangelh=ceil(lents/2);
 		rangerh=floor(lents/2);
 	}
 	
-	int cutLeft = lents-rangelh+3;
+	int cutLeft = lents-rangelh+2;
 	int cutRight = cutLeft+no_volumes-1;
-	std::cout<<cutLeft<<std::endl;
-	std::cout<<cutRight<<std::endl;
 	
 	if (cutRight-cutLeft != no_volumes-1)
 	{
@@ -465,19 +389,19 @@ int shift_volume()
 	}
 
 	
-	for (int slice=1; slice<=zz; slice++) {
+	for (int slice=1; slice<=zz; slice++)
+	{		
 		
 		for (int x_pos = 0; x_pos < xx; x_pos++)
 		{
+			
 			for (int y_pos = 0; y_pos < yy; y_pos++)
 			{
-		
 				voxeltimeseries = timeseries.voxelts(x_pos,y_pos,slice-1);
 				fliptimeseries = voxeltimeseries.Reverse();
-				fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);
-				
-				cattimeseries=fliptimeseries.Rows(rangelh,lents)&voxeltimeseries&fliptimeseries.Rows(1,rangerh);
-				filter_timeseries(&cattimeseries, &FIR, timings(slice,1)*samplingrate,zz,slice);
+				fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);				
+				cattimeseries=fliptimeseries.Rows(rangelh,lents)&voxeltimeseries&fliptimeseries.Rows(1,rangerh);				
+				filter_timeseries(&cattimeseries, &FIR, (int)floor(timings(slice,1)*(float)samplingrate+0.5),zz,slice);
 				cattimeseries=cattimeseries.Rows(cutLeft,cutRight);
 				timeseries.setvoxelts(cattimeseries,x_pos,y_pos,slice-1);
 	
@@ -486,10 +410,6 @@ int shift_volume()
 	}
 	
 	write_volume4D(timeseries,out.value());
-
-
-  
-  
   return 0;
 }
 
@@ -511,11 +431,9 @@ int main (int argc,char** argv)
 	options.add(start);
 	options.add(direction);
 	options.add(order);
+	options.add(lpf);
 	options.add(timing);
 	options.add(ref);
-	options.add(cores);
-	options.add(mem);
-	options.add(force);
 
 	options.parse_command_line(argc, argv);
 
@@ -548,18 +466,22 @@ int main (int argc,char** argv)
 	string filename=InputFile.substr(InputFile.find_last_of( '/' ) + 1 );
 	string::size_type n = filename.find_last_of('.');
 	string directory=InputFile.substr(0,InputFile.find_last_of('/')+1);
-	std::cout<<"filename: "<<filename<<std::endl;
-	std::cout<<"directory: "<<directory<<std::endl;
-	std::cout<<"n: "<<n<<std::endl;
-	std::cout<<"Removing Extension"<<std::endl;
+
 	while (n!=string::npos)
 	{
 		filename=filename.substr(0,n);
-		std::cout<<"filename: "<<filename<<std::endl;
 		n=filename.find_last_of('.');
-		std::cout<<"n: "<<n<<std::endl;
 	}
 	  out.set_value(directory+filename+ "_st.nii.gz");			
+  }
+  
+  if (lpf.value()==0)
+  {
+	float cutoff=(float) 1.0/(2.0*TR.value())*0.8;
+	std::ostringstream ss;
+	ss << cutoff;
+	std::string s(ss.str());
+	lpf.set_value(s);
   }
   
   int retval = shift_volume();
