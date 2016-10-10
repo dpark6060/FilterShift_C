@@ -260,8 +260,7 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		
 		Matrix TempTimings;
 		TempTimings.ReSize(zs,1);
-		float tmn;
-		float tmx;		
+		
 		try
 		{
 			*timings = read_ascii_matrix(timing.value(), zs, 1);
@@ -290,6 +289,8 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		//Slice Order File, Default Reference Slice Tested 9/23/16 - Passed
 		//Slice Order File, Custom Reference Slice Tested 9/23 - Passed		
 		// 9/23/16 - Will not Run With Multiband, only slice timing file (User Burden, Deal With It)
+		//Slice Order File, Default Reference Slice Tested 10/10/16 - Passed
+		//Slice Order File, Custom Reference Slice Tested 10/10/16 - Passed		
 		
 		int tmx;
 		float shift;
@@ -303,28 +304,27 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 			std::cout<<"Error Loading file "<<order.value()<<std::endl;
 			return;
 		}
-		
+		tmx=orders->Maximum();
 		if (orders->Nrows()!=zs)
 		{
 			std::cout<<"Slice order file does not have the correct number of slices"<<std::endl;
 			return;
 		}
 		Matrix TimeList;
-		TimeList.ReSize(tmx,1);		
+		TimeList.ReSize(zs,1);		
 		shift=TR.value()*1.0/tmx;
 
 		for ( int i=1; i<=zs; i++ )
 		{
 			TimeList(i,1)=(float) (i-1)*shift;
 		}
-		
+
 		// 9/23/16 - Made This loop more efficient
 		
 		for (int j=1;j<=zs;j++)
 		{			
 			timings->operator()(orders->operator()(j,1),1)=TimeList(j,1);					
 		}
-		
 		
 		timings->operator-=(timings->operator()(ref.value(),1));
 		
@@ -363,7 +363,6 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		
 
 	}
-	
 }
 
 
