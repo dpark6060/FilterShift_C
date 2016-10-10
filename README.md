@@ -32,6 +32,7 @@ Note: you will need superuser access to do this successfully.
 
 
 ## Using filtershift
+```shell
 filtershift --in <InputFile> --tr <TR> [options]
 
 Compulsory arguments (You MUST set one or more of):
@@ -127,7 +128,7 @@ Optional arguments (You may optionally specify one or more of):
 
 	--lpf	 Only Run the Lowpass Filter, do not
 			 Preform slice timing correction
-
+```
 ## About QNL
 
 [QNL Homepage](http://www.columbia.edu/cu/qnl/)
