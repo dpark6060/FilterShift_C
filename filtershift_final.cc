@@ -23,112 +23,67 @@ using namespace NEWMAT;
 using namespace NEWIMAGE;
 using namespace Utilities;
 
-string title="\n\nFilterShift \nQNL's tool for optimal slice timing correction\n\
-#WeRememberHarambe\n";
-string examples="filtershift --in <InputFile> --tr <TR> [options]\
-\n\t If no other options are set, this assumes ascending\
-\n\t Slice order with no interleave.\n\
-\n\t To use with a slice Order file, the TR must be\
-\n\t specified, and slices will be shifted according to\
-\n\t a fractional amount of the TR.  By default, we align\
-\n\t to the first slice acquired in the TR.\n\
-\n\t To use a slice timing file, no TR is required,\
-\n\t simply provide the desired shift in seconds as a\
-\n\t Column vector, saved in a text file.  Slice\
-\n\t Shifting is independent of all other slices,\
-\n\t so multiple slices can be shifted the same amount\
-\n\t (To correct multi-band acquisition, for example)\n";
+string title="FilterShift \nQNL's tool for optimal slice timing correction";
+string examples="filtershift --in <InputFile> --tr <TR> [options]";
 
-Option<string> input(string("-i,--in"), string(""),string(
-" filename the input image to perform STC on\n"),
+Option<string> input(string("--in"), string(""),
+			  string("\tfilename the input image to perform STC on\n"),
 			  true, requires_argument);
 
-Option<float> TR(string("--TR"), 2.0,string(
-" Set the TR of the original fMRI data in seconds\n"),
-			  false, requires_argument);
+Option<float> TR(string("--TR"), 2.0,
+			  string("\tSet the TR of the original fMRI data in seconds\n"),
+			  true, requires_argument);
 
-Option<int> interleave(string("--itl"), 0, string(
-" set the interleave parameter, or how many slices are\
-\n\t\t\t incremented between acquisitions\
-\n\t\t\t 1 = sequential acquisition\
-\n\t\t\t 2 = even/odd acquisition (acquire every second slice)\
-\n\t\t\t 3 = acquire every third slice, etc\
-\n\t\t\t Leaving this blank will assume bottom up sequential\
-\n\t\t\t acquisition\n"), 
+Option<int> interleave(string("-i,--interleave"), 0, 
+			 string("\tset the interleave parameter, or how many slices are incramented between acquisitions\
+					\n\t\t\t\t\t1 = sequential acquisition\
+					\n\t\t\t\t\t2 = even/odd acquisition (acquire every second slice)\
+					\n\t\t\t\t\t3 = acquire every third slice, etc\n"), 
 			 false, requires_argument);
 
-Option<string> out(string("-o,--out"), string(""),string(
-	   " Specify an output file name - all working directories\
-\n\t\t\t will be created in the parent directory specified\
-\n\t\t\t here. Leave blank to run in the parent directory\
-\n\t\t\t of <InputFile>\n"), 
+Option<string> out(string("-o,--out"), string(""), 
+			 string("\tSpecify an output file name - all working directories will be created in the parent directory specified here.\
+					\n\t\t\t\t\tLeave blank to run in the parent directory of <InputFile>\n"), 
 			 false, requires_argument);
 
-Option<int> start(string("-s,--start"), 0,string(
-	   " Set the starting slice - The slice that was acquired\
-\n\t\t\t first in the sequence. Default is slice 1, the bottom\
-\n\t\t\t most slice. This starts the interleave from that slice.\
-\n\t\t\t If your interleave parameter is '1' and your starting\
-\n\t\t\t slice is '3', your slice acquisition sequence will be\
-\n\t\t\t modeled as:\
-\n\t\t\t\t 3\
-\n\t\t\t\t 5\
-\n\t\t\t\t 7\
-\n\t\t\t\t 9...\n"),
+Option<int> start(string("-s,--start"), 0,
+			  string("\tSet the starting slice - The slice that was acquired first in the sequence.  Default is slice 1, the bottom most slice.\
+					 \n\t\t\t\t\tThis starts the interleave from that slice.  If your interleave parameter is '1'\
+					 \n\t\t\t\t\tand your starting slice is '3', your slice acquisition sequence will be modled as:\
+					 \n\t\t\t\t\t3\n\t\t\t\t\t5\n\t\t\t\t\t7\n\t\t\t\t\t9...\n"),
 			  false, requires_argument);
 			  
-Option<int> direction(string("-d,--direction"), 1,string(
-		  " value 1 or -1.  Set the direction of slice \
-\n\t\t\t acquisition.\
-\n\t\t\t 1: ascending slice acquisition:(1,3,5,7,9...)\
-\n\t\t\t-1: descending slice acquisition: (9,7,5,3,...)\n"), 
+Option<int> direction(string("-d,--direction"), 1, 
+			 string("\tvalue 1 or -1.  Set the direction of slice acquisition.\
+					\n\t\t\t\t\t 1: implies ascending slice acquisition from starting slice: (3,5,7,9...)\
+					\n\t\t\t\t\t-1: implies descending slice acquisition from starting slice: (7,5,3,...)\n"), 
 			 false, requires_argument);
 
-Option<string> order(string("--order"), string(""),string(
-     "\t Slice Order File.  This file is the order in which\
-\n\t\t\t each slice was acquired. each row represents the\
-\n\t\t\t order in which that slice was acquired. For example,\
-\n\t\t\t '1' in the first row means that slice 1 was acquired\
-\n\t\t\t first. '20' in the second row means that slice 20 was\
-\n\t\t\t acquired 2nd. If present, all interlave parameters\
-\n\t\t\t are ignored, and slices are shifted using the slice\
-\n\t\t\t order file. we refer to the bottom slice in the image\
-\n\t\t\t as slice 1, not slice 0\n"),
+Option<string> order(string("--order"), string(""),
+			 string("\t\tSlice Order File.  This file is the order in which each slice was acquired. each row represents the order in which that slice was acquired.\
+					\n\t\t\t\t\t For example, '1' in the first row means that slice 1 was aquired first. '20' in the second row means that slice 2 was acquired 20th.\
+					\n\t\t\t\t\t If present, all interelave parameters are ignored, and slices are shifted using the slice order file\
+					\n\t\t\t\t\t we refer to the bottom slice in the image as slice 1, not slice 0\n"),
 			 false, requires_argument);
 
-Option<float> cf(string("--cf"),0.21,string(
-	 "\t Set the cutoff frequency of the lowpass filter in Hz.\
-\n\t\t\t Note that by default, this is set to 0.21 Hz.\n"),
+Option<float> lpf(string("--lpf"),0,
+				  string("\tSet the cutoff frequency of the lowpass filter in Hz.  \n\t\t\t\t\tNote that by default, this is set to include 80% of the total availible bandwidth.\n"),
 				  false,requires_argument);
 
-Option<string> timing(string("--timing"), string(""),string(
-	   " Slice Timing File.  This file is the time at which\
-\n\t\t\t each slice\ was acquired relative to the first slice.\
-\n\t\t\t each row represents the time at which that slice was\
-\n\t\t\t acquired. For example, '0' in the first row means\
-\n\t\t\t that slice 1 was acquired first, and will be shifted 0\
-\n\t\t\t seconds. '0.5' in the second row means that slice 2\
-\n\t\t\t was acquired 0.5 seconds after the first slice, and\
-\n\t\t\t will be shifted 0.5s. If present, all interleave\
-\n\t\t\t parameters are ignored, and slices are shifted using\
-\n\t\t\t the slice timing file. If you put both a slice timing\
-\n\t\t\t and a slice order, the program will yell at you and\
-\n\t\t\t refuse to run.\n"),
+Option<string> timing(string("--timing"), string(""),
+			 string("\tSlice Timing File.  This file is the time at which each slice was acquired relative to the first slice. each row represents the time at which that slice was acquired.\
+\n\t\t\t\t\t For example, '0' in the first row means that slice 1 was aquired first, and will be shifted 0 seconds.  '0.5' in the second row\
+					  \n\t\t\t\t\t means that slice 2 was acquired 0.5 seconds after the first slice, and will be shifted 0.5s.\
+					  \n\t\t\t\t\t If present, all interelave parameters are ignored, and slices are shifted using the slice timing file.\
+					  \n\t\t\t\t\t If you put both a slice timing and a slice order, the program will yell at you and refuse to run.\n"),
 			 false, requires_argument);
 
-Option<int> ref(string("-r,--reference"), 1,string(
-	   " Set the Reference slice\
-\n\t\t\t This is the slice the data is aligned to.\
-\n\t\t\t Default is the first slice\n"),
+Option<int> ref(string("-r,--reference"), 1,
+			 string("\tSet the Reference slice\n\t\t\t\t\tThis is the slice the data is aligned to.  Default is the first slice\n"),
 			 false, requires_argument);
-
-Option<int> lpf(string("--lpf"), 1,string(
-	   " Only Run the Lowpass Filter, do not\
-\n\t\t\t Preform slice timing correction\n"),
-			 false, no_argument);
 			      
   Option<bool> help(string("-h,--help"), false,
-		  string(" display this message\n"),
+		  string("\tdisplay this message\n"),
 		  false, no_argument);
 
 
@@ -348,6 +303,7 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		{
 			for ( int j =0; j<=floor((float) zs/interleave.value()); j++ ) 
 			{
+
 				if ((i)+(j*interleave.value())+1<=zs)
 				{
 					orders->operator()(counter,1)=(i)+(j*interleave.value())+1;
@@ -369,18 +325,6 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 
 int shift_volume()
 {
-	
-	// 10-10-16 Added check for some combination of optional arguments
-	// Now you idiots can't mess up your data by leaving out these settings.
-	// ...but I'm sure you'll still manage to find a way >:(
-	
-	if (!TR.set()&&!order.set()&&!timing.set()&&!lpf.set())
-	{
-		std::cout<<"Must Specify either a TR, a slice Order file,a slice timing file,\n or indicate that you only wish to preform filtering"<<std::endl;
-		return -1;
-	}
-	
-	
 	volume4D<float> timeseries;
 	Matrix timings;
 	Matrix orders;
@@ -397,8 +341,6 @@ int shift_volume()
 	return -1;
   }
   	
-
-	
 	timings.ReSize(timeseries.zsize(),1);
 	orders.ReSize(timeseries.zsize(),1);	
 	make_timings(&timings,&orders,timeseries.zsize());	
@@ -408,7 +350,7 @@ int shift_volume()
 	int yy = timeseries.ysize();
 	int zz = timeseries.zsize();
 	
-	float cutoff=cf.value();
+	float cutoff=lpf.value();
 	float samplingrate=(float) zz/TR.value();
 	float stopgain=-20;
 	double transwidth=.1;
@@ -446,21 +388,6 @@ int shift_volume()
 		return 1;
 	}
 
-	float span;
-	float mn;
-	float mn2;
-	float span2;
-	
-	// 10/19/16 - "lpf" option now specifies JUST filtering.  This part sets
-	// the slice delay to be zero for all of them (No shifting.  NO SHIFTING!)
-	
-	if (lpf.set())
-	{
-		for (int tm=1;tm<=zz;tm++)
-		{
-			timings(tm,1)=0;
-		}
-	}
 	
 	for (int slice=1; slice<=zz; slice++)
 	{		
@@ -471,28 +398,12 @@ int shift_volume()
 			for (int y_pos = 0; y_pos < yy; y_pos++)
 			{
 				voxeltimeseries = timeseries.voxelts(x_pos,y_pos,slice-1);
-				mn=voxeltimeseries.Sum()/voxeltimeseries.Nrows();
-				voxeltimeseries-=(mn);
-				span=voxeltimeseries.Maximum()-voxeltimeseries.Minimum();
-				
-				// 9/27/16 - Filter changes mean and span - added code to maintain mean and span.
-				// Also checks to see if the span is zero.  If so, do not filter.
-				
-				if ( span!=0 )
-				{
-					fliptimeseries = voxeltimeseries.Reverse();
-					fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);				
-					cattimeseries=fliptimeseries.Rows(rangelh,lents)&voxeltimeseries&fliptimeseries.Rows(1,rangerh);				
-					filter_timeseries(&cattimeseries, &FIR, (int)floor(timings(slice,1)*(float)samplingrate+0.5),zz,slice);
-					cattimeseries=cattimeseries.Rows(cutLeft,cutRight);
-					mn2=cattimeseries.Sum()/cattimeseries.Nrows();
-					cattimeseries-=(mn2);
-					span2=cattimeseries.Maximum()-cattimeseries.Minimum();
-					cattimeseries/=span2;
-					cattimeseries*=span;
-					cattimeseries+=mn;					
-					timeseries.setvoxelts(cattimeseries,x_pos,y_pos,slice-1);
-				}
+				fliptimeseries = voxeltimeseries.Reverse();
+				fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);				
+				cattimeseries=fliptimeseries.Rows(rangelh,lents)&voxeltimeseries&fliptimeseries.Rows(1,rangerh);				
+				filter_timeseries(&cattimeseries, &FIR, (int)floor(timings(slice,1)*(float)samplingrate+0.5),zz,slice);
+				cattimeseries=cattimeseries.Rows(cutLeft,cutRight);
+				timeseries.setvoxelts(cattimeseries,x_pos,y_pos,slice-1);
 	
 			}
 		}
@@ -520,11 +431,9 @@ int main (int argc,char** argv)
 	options.add(start);
 	options.add(direction);
 	options.add(order);
-	options.add(cf);
+	options.add(lpf);
 	options.add(timing);
 	options.add(ref);
-	options.add(lpf);
-
 
 	options.parse_command_line(argc, argv);
 
