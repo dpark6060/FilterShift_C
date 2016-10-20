@@ -13,20 +13,21 @@
 
 
 class window {
+    int PassZero;
     const float PI;
     float cutoff;
-    int SamplingRate;
+    float SamplingRate;
     float Nyq;
     int N;
     float beta;
     std::vector<float> FIR;
     float StopGain;
-    float TranWidth;
+    double TranWidth;
     public:
         window();
-        window(float co, float sr, float sg, float tw);
+        window(float co, float sr, float sg, double tw, int pz);
         void kaiserord (float,float);
-        float kaiser_atten (int,int);
+        float kaiser_atten (int,float);
         void kaiser_beta (float);
         void get_window(std::vector<float>, int);
         void print_info();
