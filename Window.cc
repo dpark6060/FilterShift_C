@@ -24,7 +24,7 @@ using namespace MISCMATHS;
 
 
 window::window():PI(3.14159265359){
-    
+    PassZero=1;
     cutoff=0.0;
     SamplingRate=0.0;
     StopGain=0.0;
@@ -36,7 +36,7 @@ window::window():PI(3.14159265359){
     
 }
 
-window::window(float co, float sr, float sg, double tw):cutoff(co),SamplingRate(sr),StopGain(sg),TranWidth(tw),PI(3.14159265359)
+window::window(float co, float sr, float sg, double tw, int pz):cutoff(co),SamplingRate(sr),StopGain(sg),TranWidth(tw),PassZero(pz),PI(3.14159265359)
 {
     
     Nyq=SamplingRate/2.0;
@@ -47,6 +47,11 @@ window::window(float co, float sr, float sg, double tw):cutoff(co),SamplingRate(
 }
 
 void window::kaiserord (float ripple, float width ) {
+//    NiquistRate = SamplingRate/2.0
+//	N, beta = sig.kaiserord(StopGain,TranWidth/NiquistRate)
+//	taps = sig.firwin(N, CutOffFreq, window=('kaiser', beta), pass_zero=False, scale=True, nyq=NiquistRate)
+	//return (taps,NiquistRate)
+
     
     float A = std::abs(ripple);    
     if ( A < 8 ) {
@@ -56,6 +61,8 @@ void window::kaiserord (float ripple, float width ) {
     else {
         kaiser_beta(A);
     }
+    std::cout<<"Raw N:"<<std::endl;
+    std::cout<<(A-7.95)/2.285/(PI*width)+1<<std::endl;
     N= (int) std::ceil((A-7.95)/2.285/(PI*width)+1);
 }
 
@@ -71,7 +78,7 @@ void window::kaiser_beta (float a) {
     }
 }
 
-float window::kaiser_atten ( int n, int width ){
+float window::kaiser_atten ( int n, float width ){
     float a;
     a=2.285 * (n - 1) * PI * width + 7.95;
     return a;
@@ -98,6 +105,7 @@ void window::print_info(){
     std::cout << "N=\t"<<N <<std::endl;
     std::cout << "beta=\t"<<beta <<std::endl;
     std::cout << bessi(0,2) <<std::endl;
+
     
 }
 
@@ -114,8 +122,28 @@ std::vector<float> window::get_fir(){
     float right;
     float scale_frequency;
     float s;
+    //#int pass_nyquist;
+    
     
     kaiserord(StopGain,TranWidth/Nyq); // given our StopGain and transition width, calculate the order (Sets N and Beta)
+    bool odd=N&1;
+    //#pass_nyquist=odd^PassZero;
+    
+    std::cout<<N<<std::endl;
+    std::cout<<odd<<std::endl;
+    
+    if (PassZero==0&&!odd)
+    {
+        N++;
+        StopGain=kaiser_atten(N,TranWidth/Nyq);
+        kaiser_beta(StopGain);
+        //kaiserord(StopGain,TranWidth/Nyq);
+        print_info();
+        std::cout<<"Recalculated N: "<<N<<std::endl;
+    }
+    
+    odd=N&1;
+    //#pass_nyquist=odd^PassZero;
     
     std::vector<float> m;
     m.reserve(N);
@@ -124,9 +152,20 @@ std::vector<float> window::get_fir(){
     std::vector<float> c;
     c.reserve(N);
 
-
-    cutoff_1d[0]=0.0;
-    cutoff_1d[1]=cutoff/Nyq;
+    
+    if (PassZero==1)
+    {
+        cutoff_1d[0]=0.0;
+        cutoff_1d[1]=cutoff/Nyq;
+    }
+    else
+    {
+        cutoff_1d[0]=cutoff/Nyq;
+        cutoff_1d[1]=1.0;
+        std::cout<<"HPF mode"<<std::endl;
+    }
+    
+    
     
     alpha=0.5*(N-1);
     
@@ -137,11 +176,7 @@ std::vector<float> window::get_fir(){
         h[i]=h[(int) i]-cutoff_1d[0]*sincfn(cutoff_1d[0]*m[i]);
     }
     
-    if (N % 2 != 0)
-    {
-        N++;
-        alpha=0.5*(N-1);
-    }
+
     
     FIR.resize(N);
     left=cutoff_1d[0];
@@ -169,10 +204,15 @@ std::vector<float> window::get_fir(){
         s+=FIR[i]*c[i];
     }
     
-    for (int i=0;i<N;i++)
-    {
-        FIR[i]=FIR[i]/s;
-    }
+    //for (int i=0;i<N;i++)
+    //{
+    //    FIR[i]=FIR[i]/s;
+    //}
+    
+    std::ofstream output_file("/home/dparker/Desktop/FIRtest.txt");
+    output_file.precision(32);
+    std::ostream_iterator<float> output_iterator(output_file,"\n");
+    std::copy(FIR.begin(),FIR.end(),output_iterator);
 
     
     return FIR;

@@ -8,6 +8,7 @@
 #include <vector>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <algorithm>
 
 
 #include "miscmaths/optimise.h"
@@ -45,7 +46,7 @@ Option<string> input(string("-i,--in"), string(""),string(
 
 Option<float> TR(string("--TR"), 2.0,string(
 " Set the TR of the original fMRI data in seconds\n"),
-			  false, requires_argument);
+			  true, requires_argument);
 
 Option<int> interleave(string("--itl"), 0, string(
 " set the interleave parameter, or how many slices are\
@@ -116,17 +117,31 @@ Option<string> timing(string("--timing"), string(""),string(
 \n\t\t\t refuse to run.\n"),
 			 false, requires_argument);
 
-Option<int> ref(string("-r,--reference"), 1,string(
+Option<int> refslice(string("--rs,--refslice"), 1,string(
 	   " Set the Reference slice\
 \n\t\t\t This is the slice the data is aligned to.\
 \n\t\t\t Default is the first slice\n"),
 			 false, requires_argument);
 
-Option<int> lpf(string("--lpf"), 1,string(
+// 11/01/16 - Added reftime as option to allow for specific time alignment.
+
+Option<float> reftime(string("--rt,--reftime"), 0,string(
+	   " Set the Reference time\
+\n\t\t\t This is the time within each tr the data is aligned\
+\n\t\t\t  to. Default is 0s\n"),
+			 false, requires_argument);
+
+Option<int> lpf(string("--lpf"), false,string(
 	   " Only Run the Lowpass Filter, do not\
 \n\t\t\t Preform slice timing correction\n"),
 			 false, no_argument);
 			      
+Option<int> hpf(string("--hpf"), false,string(
+	   " Only Run the a highpass filter, do not\
+\n\t\t\t Preform slice timing correction.  Cutoff\
+\n\t\t\t frequency still set by --cf option\n"),
+			 false, no_argument);
+				  
   Option<bool> help(string("-h,--help"), false,
 		  string(" display this message\n"),
 		  false, no_argument);
@@ -166,27 +181,24 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 	pFIR.assign(FIR->begin(),FIR->end());
 	std::vector<float> padd;
 	padd.reserve(std::abs(shift));	
-	int ModSample=0;
+	int ModSample=std::abs(shift);
 	
 	// If the shift if positive (shifting the signal to the right), then we want to DELAY the filter, add zeros to the END (Right hand side)		
-	if (shift>0)
-	{
-
-		padd.assign(std::abs(shift),pFIR.back());
-		pFIR.insert (pFIR.end(),padd.begin(),padd.end());
-		ModSample=shift;
-	}
 	
-	else if (shift<0)
-	{
-		padd.assign(std::abs(shift),pFIR.front());
 
-		padd.insert(padd.end(),pFIR.begin(),pFIR.end());
-		pFIR=padd;
-		
+	padd.assign(std::abs(shift),pFIR.back());
+	//std::cout<<"shift:\t"<<shift<<std::endl;
+	//std::cout<<"padd:"<<std::endl;
+	//std::cout<<padd<<std::endl;
+	pFIR.insert(pFIR.end(),padd.begin(),padd.end());
+	
+	
+	if (shift<0)
+	{
+		std::reverse(pFIR.begin(),pFIR.end());
 		ModSample=0;
-		
-	}	
+	}
+	 
 	
 	ColumnVector FIR_down_shift;
 	ColumnVector FIR_down;
@@ -195,14 +207,18 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 	lenF=FIR_down_shift.Nrows();	
 	firLen=1;
 	
-	for (int i = 0; i< SamplePoints.size(); i++)
+	for (unsigned i = 0; i< SamplePoints.size(); i++)
 	{
 		FIR_down(firLen)=FIR->operator[](SamplePoints[i]);
 		SamplePoints[i]+=ModSample;
 		FIR_down_shift(firLen)=pFIR[SamplePoints[i]];
 		firLen+=1;
 	}
+	
+	// If the shift if negative (shifting the signal to the left), then we want to add the zeros to the beginning (flip the signal)		
 
+	
+	
 	ColumnVector filtered;
 	filtered.ReSize(lenT);	
 	int startT = floor(lenF/2);	
@@ -243,13 +259,15 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 
 void make_timings(Matrix *timings, Matrix *orders, int zs)
 {
+	
+	// This is  the timing file case
 	if ( timing.set() )
 	{
 		
-		if ( ref.set() )
+		if ( refslice.set()||reftime.set() )
 		{
-			std::cout<<"When using a Slice Timing file, the times in the file supercede all other settings.  The reference slice specified will be ignored"<<std::endl;
-			std::cout<<"If you wish to alighn data to a specific slice, please make that adjustment in the Slice Timing File, or omit the slice timing file."<<std::endl;
+			std::cout<<"When using a Slice Timing file, the times in the file supercede all other settings.  The reference slice/time specified will be ignored"<<std::endl;
+			std::cout<<"If you wish to align data to a specific slice, please make that adjustment in the Slice Timing File, or omit the slice timing file."<<std::endl;
 			std::cout<<"Or use a Slice ORDER file, and specify a reference slice that way.  There's one clear option here that involves the least amount of work."<<std::endl;
 		}
 		// Slice Timing File, deftault Reference Slice, Tested 9/22/16 - Shifting Success, Slice Order Not
@@ -283,7 +301,9 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		
 
 		
-	}	
+	}
+	
+	// this is the order file case
 	else if ( order.set() )
 	{
 		//Slice Order File, Default Reference Slice Tested 9/23/16 - Passed
@@ -326,13 +346,56 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 			timings->operator()(orders->operator()(j,1),1)=TimeList(j,1);					
 		}
 		
-		timings->operator-=(timings->operator()(ref.value(),1));
-		
+		if ( refslice.set() )
+		{		
+			timings->operator-=(timings->operator()(refslice.value(),1));
+		}
+		else if ( reftime.set() )
+		{
+			timings->operator-=(reftime.value());
+		}
 	}
-	else
+	
+	// this is the case if there's just a reference slice given (TR and itl assumed provided)
+	else if (refslice.set() )
 	{
 		// Create Timing File Tested 9/22/16 - Succesful
 		// With Reference Tested 9/22/16 - Succesful
+		
+		float dt;
+		Matrix IntSeq;
+		Matrix TimeList;
+		IntSeq.ReSize(zs,1);		
+		TimeList.ReSize(zs,1);
+		dt=TR.value()/(zs+1);
+		int counter;
+		counter=1;
+		
+		
+		for ( int i=0; abs(i)<interleave.value(); i=i+1*direction.value() )
+		{
+			for ( int j =0; j<=floor((float) zs/interleave.value()); j++ ) 
+			{
+				if ((i)+(j*interleave.value())+1<=zs)
+				{
+					orders->operator()(counter,1)=(i)+(j*interleave.value())+1;
+					TimeList((i)+(j*interleave.value())+1,1)=counter;
+					counter++;
+				}
+			}
+		}
+		
+		TimeList*=dt;
+		TimeList-=TimeList(refslice.value(),1);
+		*timings=TimeList;
+		
+
+	}
+	
+	// this is the case if there's just a reference time given (TR and itl assumed provided)
+	else if (reftime.set() )
+	{
+		// 11/01/16 - added, need to test.
 		
 		float dt;
 		Matrix IntSeq;
@@ -358,11 +421,14 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		}
 		
 		TimeList*=dt;
-		TimeList-=TimeList(ref.value(),1);
+		TimeList-=reftime.value();
 		*timings=TimeList;
 		
 
 	}
+	
+	
+	
 }
 
 
@@ -373,7 +439,7 @@ int shift_volume()
 	// Now you idiots can't mess up your data by leaving out these settings.
 	// ...but I'm sure you'll still manage to find a way >:(
 	
-	if (!TR.set()&&!order.set()&&!timing.set()&&!lpf.set())
+	if (!TR.set()&&!order.set()&&!timing.set()&&!lpf.set()&&!hpf.set())
 	{
 		std::cout<<"Must Specify either a TR, a slice Order file,a slice timing file,\n or indicate that you only wish to preform filtering"<<std::endl;
 		return -1;
@@ -400,7 +466,10 @@ int shift_volume()
 	
 	timings.ReSize(timeseries.zsize(),1);
 	orders.ReSize(timeseries.zsize(),1);	
-	make_timings(&timings,&orders,timeseries.zsize());	
+	make_timings(&timings,&orders,timeseries.zsize());
+	
+	string Output=out.value();
+	string directory=Output.substr(0,Output.find_last_of('/')+1);
 	
 	int no_volumes = timeseries.tsize();
 	int xx = timeseries.xsize();
@@ -408,12 +477,26 @@ int shift_volume()
 	int zz = timeseries.zsize();
 	
 	float cutoff=cf.value();
-	float samplingrate=(float) zz/TR.value();
-	float stopgain=-20;
+	float samplingrate=(float) (zz/TR.value());
+	float stopgain=-28;
 	double transwidth=.1;
+	int PassZero=1;
+	int skip=samplingrate*TR.value();
 	
-	window::window kaiser(cutoff,samplingrate,stopgain,transwidth);
+	
+	// 01/16/17 - HPF can't operate the same way LPF does (on zero-padded data), so just filter normally.
+	// 01/16/17 - Testing HPF operation now...
+	if (hpf.set())
+	{
+		PassZero=0;
+		samplingrate=TR.value();
+		skip=1;
+	}
+	
+	//std::cout<<"Pass Zero: "<<PassZero<<std::endl;
+	window::window kaiser(cutoff,samplingrate,stopgain,transwidth,PassZero);
 	FIR=kaiser.get_fir();
+	//kaiser.print_info();
 	
 	ColumnVector voxeltimeseries = timeseries.voxelts(1,1,1);
 	ColumnVector fliptimeseries = voxeltimeseries.Reverse();
@@ -437,6 +520,9 @@ int shift_volume()
 		rangerh=floor(lents/2);
 	}
 	
+	// 11/28/16  Maybe this "+2" has something to do with the negative bold problem...?
+	// No, just checked.  
+	
 	int cutLeft = lents-rangelh+2;
 	int cutRight = cutLeft+no_volumes-1;
 	
@@ -453,14 +539,15 @@ int shift_volume()
 	// 10/19/16 - "lpf" option now specifies JUST filtering.  This part sets
 	// the slice delay to be zero for all of them (No shifting.  NO SHIFTING!)
 	
-	if (lpf.set())
+	if (lpf.set()||hpf.set())
 	{
 		for (int tm=1;tm<=zz;tm++)
 		{
 			timings(tm,1)=0;
 		}
 	}
-	
+	write_ascii_matrix(directory+"TimingFile.txt", timings, 6);
+
 	for (int slice=1; slice<=zz; slice++)
 	{		
 		
@@ -474,6 +561,9 @@ int shift_volume()
 				voxeltimeseries-=(mn);
 				span=voxeltimeseries.Maximum()-voxeltimeseries.Minimum();
 				
+				// 01/16/17 - re-added original mean so HPF functions correctly...but there seems to be an offset in the final data.
+				voxeltimeseries+=(mn);
+				
 				// 9/27/16 - Filter changes mean and span - added code to maintain mean and span.
 				// Also checks to see if the span is zero.  If so, do not filter.
 				
@@ -482,17 +572,22 @@ int shift_volume()
 					fliptimeseries = voxeltimeseries.Reverse();
 					fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);				
 					cattimeseries=fliptimeseries.Rows(rangelh,lents)&voxeltimeseries&fliptimeseries.Rows(1,rangerh);				
-					filter_timeseries(&cattimeseries, &FIR, (int)floor(timings(slice,1)*(float)samplingrate+0.5),zz,slice);
+					filter_timeseries(&cattimeseries, &FIR, (int)floor(timings(slice,1)*(float)samplingrate+0.5),skip,slice);
 					cattimeseries=cattimeseries.Rows(cutLeft,cutRight);
-					mn2=cattimeseries.Sum()/cattimeseries.Nrows();
-					cattimeseries-=(mn2);
-					span2=cattimeseries.Maximum()-cattimeseries.Minimum();
-					cattimeseries/=span2;
-					cattimeseries*=span;
-					cattimeseries+=mn;					
+					
+					// 01/16/17 - Only remean and adjust span for LPF.
+					if (!hpf.set())
+					{
+					  mn2=cattimeseries.Sum()/cattimeseries.Nrows();
+					  cattimeseries-=(mn2);
+					  span2=cattimeseries.Maximum()-cattimeseries.Minimum();
+					  cattimeseries/=span2;
+					  cattimeseries*=span;
+					  cattimeseries+=mn;
+					}					
+					
 					timeseries.setvoxelts(cattimeseries,x_pos,y_pos,slice-1);
 				}
-	
 			}
 		}
 	}
@@ -521,8 +616,10 @@ int main (int argc,char** argv)
 	options.add(order);
 	options.add(cf);
 	options.add(timing);
-	options.add(ref);
+	options.add(refslice);
+	options.add(reftime);
 	options.add(lpf);
+	options.add(hpf);
 
 
 	options.parse_command_line(argc, argv);
@@ -565,13 +662,22 @@ int main (int argc,char** argv)
 	  out.set_value(directory+filename+ "_st.nii.gz");			
   }
   
-  if (lpf.value()==0)
+  // 11/01/16 - Added catch to prefent cutoff being larger than nyquist.  For some reason,
+  // This would really mess up the filtering...
+  if (cf.value()==0||cf.value()>(1.0/(2.0*TR.value())))
   {
-	float cutoff=(float) 1.0/(2.0*TR.value())*0.8;
+	float cutoff=(float) 1.0/(2.0*TR.value());
 	std::ostringstream ss;
 	ss << cutoff;
 	std::string s(ss.str());
-	lpf.set_value(s);
+	cf.set_value(s);
+  }
+  
+  if (reftime.value()>TR.value())
+  {
+	cerr<<"Reference time set by --rt must fall within 0 <= rt < TR"<<std::endl;
+	exit(EXIT_FAILURE);
+	
   }
   
   int retval = shift_volume();

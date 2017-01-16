@@ -13,6 +13,7 @@
 
 
 class window {
+    int PassZero;
     const float PI;
     float cutoff;
     float SamplingRate;
@@ -24,9 +25,9 @@ class window {
     double TranWidth;
     public:
         window();
-        window(float co, float sr, float sg, double tw);
+        window(float co, float sr, float sg, double tw, int pz);
         void kaiserord (float,float);
-        float kaiser_atten (int,int);
+        float kaiser_atten (int,float);
         void kaiser_beta (float);
         void get_window(std::vector<float>, int);
         void print_info();
