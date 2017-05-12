@@ -48,7 +48,9 @@ Option<float> TR(string("--TR"), 2.0,string(
 " Set the TR of the original fMRI data in seconds\n"),
 			  true, requires_argument);
 
-Option<int> interleave(string("--itl"), 0, string(
+// 05/12/2017 - changed "Interleave" and "start" default values from "0" to "1" 
+
+Option<int> interleave(string("--itl"), 1, string(
 " set the interleave parameter, or how many slices are\
 \n\t\t\t incremented between acquisitions\
 \n\t\t\t 1 = sequential acquisition\
@@ -65,7 +67,7 @@ Option<string> out(string("-o,--out"), string(""),string(
 \n\t\t\t of <InputFile>\n"), 
 			 false, requires_argument);
 
-Option<int> start(string("-s,--start"), 0,string(
+Option<int> start(string("-s,--start"), 1,string(
 	   " Set the starting slice - The slice that was acquired\
 \n\t\t\t first in the sequence. Default is slice 1, the bottom\
 \n\t\t\t most slice. This starts the interleave from that slice.\
@@ -310,7 +312,9 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		//Slice Order File, Custom Reference Slice Tested 9/23 - Passed		
 		// 9/23/16 - Will not Run With Multiband, only slice timing file (User Burden, Deal With It)
 		//Slice Order File, Default Reference Slice Tested 10/10/16 - Passed
-		//Slice Order File, Custom Reference Slice Tested 10/10/16 - Passed		
+		//Slice Order File, Custom Reference Slice Tested 10/10/16 - Passed
+		// 5/12/17 - Working on glitch in sequential and even odd interleaev (shift times not working)
+		// - completed, Added "else" case that catches when no ref slice or ref time is provided
 		
 		int tmx;
 		float shift;
@@ -370,8 +374,8 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		dt=TR.value()/(zs+1);
 		int counter;
 		counter=1;
-		
-		
+		std::cout<<"Interleave Value: "<<interleave.value()<<std::endl;
+		std::cout<<"direction value: "<<direction.value()<<std::endl;
 		for ( int i=0; abs(i)<interleave.value(); i=i+1*direction.value() )
 		{
 			for ( int j =0; j<=floor((float) zs/interleave.value()); j++ ) 
@@ -424,9 +428,45 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		TimeList-=reftime.value();
 		*timings=TimeList;
 		
-
+    // 5/12/17 - added to catch when no ref slice or ref time is provided (assumes slice 1 for reference)
 	}
-	
+	else
+	{
+		float dt;
+		Matrix IntSeq;
+		Matrix TimeList;
+		IntSeq.ReSize(zs,1);		
+		TimeList.ReSize(zs,1);
+		dt=TR.value()/(zs+1);
+		int counter;
+		counter=1;
+		
+		
+		for ( int i=0; abs(i)<interleave.value(); i=i+1*direction.value() )
+		{
+			for ( int j =0; j<=floor((float) zs/interleave.value()); j++ ) 
+			{
+				if ((i)+(j*interleave.value())+1<=zs)
+				{
+					orders->operator()(counter,1)=(i)+(j*interleave.value())+1;
+					TimeList((i)+(j*interleave.value())+1,1)=counter;
+					counter++;
+				}
+			}
+		}
+		
+		TimeList*=dt;
+		TimeList-=TimeList(1,1);
+		*timings=TimeList; 
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	}
 	
 	
 }
@@ -445,7 +485,6 @@ int shift_volume()
 		return -1;
 	}
 	
-	
 	volume4D<float> timeseries;
 	Matrix timings;
 	Matrix orders;
@@ -463,7 +502,7 @@ int shift_volume()
   }
   	
 
-	
+	std::cout<<"Create timing Arrays"<<std::endl;
 	timings.ReSize(timeseries.zsize(),1);
 	orders.ReSize(timeseries.zsize(),1);	
 	make_timings(&timings,&orders,timeseries.zsize());
@@ -494,10 +533,13 @@ int shift_volume()
 	}
 	
 	//std::cout<<"Pass Zero: "<<PassZero<<std::endl;
+	std::cout<<"Generate Filter START"<<std::endl;
 	window::window kaiser(cutoff,samplingrate,stopgain,transwidth,PassZero);
 	FIR=kaiser.get_fir();
+	std::cout<<"Generate Filter FINISHED - success\n"<<std::endl;
 	//kaiser.print_info();
 	
+	// I think this is just initializing the values that will be used in the loop
 	ColumnVector voxeltimeseries = timeseries.voxelts(1,1,1);
 	ColumnVector fliptimeseries = voxeltimeseries.Reverse();
 	ColumnVector cattimeseries;
@@ -547,7 +589,8 @@ int shift_volume()
 		}
 	}
 	write_ascii_matrix(directory+"TimingFile.txt", timings, 6);
-
+	std::cout<<"Timing file wrote to: "<<directory<<"TimingFile.txt\n"<<std::endl;
+	std::cout<<"Filtering START..."<<std::endl;
 	for (int slice=1; slice<=zz; slice++)
 	{		
 		
@@ -591,8 +634,10 @@ int shift_volume()
 			}
 		}
 	}
-	
+	std::cout<<"Filtering FINISHED - success\n"<<std::endl;
+	std::cout<<"Writing Output Volume"<<std::endl;
 	write_volume4D(timeseries,out.value());
+	
   return 0;
 }
 
@@ -666,6 +711,7 @@ int main (int argc,char** argv)
   // This would really mess up the filtering...
   if (cf.value()==0||cf.value()>(1.0/(2.0*TR.value())))
   {
+	std::cout<<"Adjusting Cutoff to be <= Nyquist"<<std::endl;
 	float cutoff=(float) 1.0/(2.0*TR.value());
 	std::ostringstream ss;
 	ss << cutoff;
@@ -679,8 +725,9 @@ int main (int argc,char** argv)
 	exit(EXIT_FAILURE);
 	
   }
-  
+  std::cout<<"Processing START"<<std::endl;
   int retval = shift_volume();
+  std::cout<<"Processing FINISH - success\n"<<std::endl;
   
   if (retval!=0) {
 	cerr << endl << endl << "Error detected: try -h for help" << endl;

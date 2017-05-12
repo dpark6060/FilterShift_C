@@ -129,11 +129,14 @@ std::vector<float> window::get_fir(){
     bool odd=N&1;
     //#pass_nyquist=odd^PassZero;
     
-    std::cout<<N<<std::endl;
-    std::cout<<odd<<std::endl;
+    //std::cout<<N<<std::endl;
+    //std::cout<<odd<<std::endl;
+    
+    std::cout<<"Creating Window Function..."<<std::endl;
     
     if (PassZero==0&&!odd)
     {
+        std::cout<<"    -Recalculating gain so N is odd "<<std::endl;
         N++;
         StopGain=kaiser_atten(N,TranWidth/Nyq);
         kaiser_beta(StopGain);
@@ -144,7 +147,7 @@ std::vector<float> window::get_fir(){
     
     odd=N&1;
     //#pass_nyquist=odd^PassZero;
-    
+    std::cout<<"    -Creating Arrays for Filter "<<std::endl;
     std::vector<float> m;
     m.reserve(N);
     std::vector<float> h;
@@ -168,7 +171,7 @@ std::vector<float> window::get_fir(){
     
     
     alpha=0.5*(N-1);
-    
+    std::cout<<"    -Constructing Filter "<<std::endl;
     for (int i=0;i<N;i++)
     {
         m[i]=(float) i-alpha;
@@ -196,23 +199,23 @@ std::vector<float> window::get_fir(){
     
     
     
-    
+    std::cout<<"    -Scaling and applying window "<<std::endl;
     for (int i=0;i<N;i++)
     {
         c[i]=std::cos(M_PI*m[i]*scale_frequency);
         FIR[i]=h[i]*bessi((int) 0,(double) beta*sqrt(1-pow(static_cast<float>((i-alpha)/alpha),2.0)))/bessi(0,beta);
         s+=FIR[i]*c[i];
     }
-    
+    std::cout<<"Done"<<std::endl;
     //for (int i=0;i<N;i++)
     //{
     //    FIR[i]=FIR[i]/s;
     //}
     
-    std::ofstream output_file("/home/dparker/Desktop/FIRtest.txt");
-    output_file.precision(32);
-    std::ostream_iterator<float> output_iterator(output_file,"\n");
-    std::copy(FIR.begin(),FIR.end(),output_iterator);
+    //std::ofstream output_file("/home/dparker/Desktop/FIRtest.txt");
+    //output_file.precision(32);
+    //std::ostream_iterator<float> output_iterator(output_file,"\n");
+    //std::copy(FIR.begin(),FIR.end(),output_iterator);
 
     
     return FIR;
