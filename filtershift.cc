@@ -105,7 +105,7 @@ Option<float> cf(string("--cf"),0.21,string(
 				  false,requires_argument);
 
 Option<string> timing(string("--timing"), string(""),string(
-	   " Slice Timing File.  This file is the time at which\
+	  "\t Slice Timing File.  This file is the time at which\
 \n\t\t\t each slice\ was acquired relative to the first slice.\
 \n\t\t\t each row represents the time at which that slice was\
 \n\t\t\t acquired. For example, '0' in the first row means\
@@ -143,15 +143,78 @@ Option<int> hpf(string("--hpf"), false,string(
 \n\t\t\t Preform slice timing correction.  Cutoff\
 \n\t\t\t frequency still set by --cf option\n"),
 			 false, no_argument);
+
+Option<string> axis(string("--axis"), string("z"),string(
+	   " Sets the axis along which slices are\
+\n\t\t\t acquired.  Options are 'x', 'y', or 'z'.\
+\n\t\t\t Default direction is 'z' \n"),false, requires_argument);
+
 				  
-  Option<bool> help(string("-h,--help"), false,
-		  string(" display this message\n"),
-		  false, no_argument);
+Option<bool> help(string("-h,--help"), false,
+		string(" display this message\n"),
+		false, no_argument);
 
 
 inline bool exists_test3 (const std::string& name) {
   struct stat buffer;   
   return (stat (name.c_str(), &buffer) == 0); 
+}
+
+
+// ADDED: 06/06/2018
+// adjust axis for slices acquired along an axis other than z
+// TESTED: 6/7/2018 - Tested on X and Y acquired Simulated Data.
+// Test Path: /share/dbp2123/dparker/Code/TestSTC
+// Seems to work fine.
+// TODO: Need to make sure that when the object it flipped, Slice order row 1 still corresponds to slice 1
+
+void adjust_axis(volume4D<float>& timeseries, std::string axis, std::string stage){
+  
+  
+  
+  // We assume that the fmri is acquired along the z axis, with slices in the XY plane
+  // if this isn't the case, we have to realign the matrix so that it is.
+  // This can be memory/computationally intensive, and a better way might be just to make
+  // three different correction loops, but that's a lot of typing and idk I don't really want to do it.
+  // If there's a better way, please let me know.
+  
+  
+  // If we're doing a forward transform, we're taking the data in and transforming it
+  // from its original shape so the program can work on it.  If we're doing the reverse,
+  // transforming it from our modified state back to its original
+  
+	if (stage=="forward")
+	{
+	  cout << "Adjusting for slice acquisition along "<< axis <<" axis"<< endl;
+	  if (axis=="x"){
+		timeseries.swapdimensions(3,2,-1);
+	  }
+	  else if (axis=="y"){
+		timeseries.swapdimensions(1,3,2);
+	  }
+	  else if (axis=="z"){
+		cout << "The default axis is already z you dummy.  Maximum effort."<< axis << endl;
+	  }
+	  else{
+		cout << "Invalid Axis option for --axis:"<< axis << endl;
+	  }
+	}
+	else if (stage=="reverse")
+	{
+	  cout << "Undoing Adjustment for slice acquisition along "<< axis <<" axis"<< endl;
+	  if (axis=="x"){
+		timeseries.swapdimensions(-3,2,1);
+	  }
+	  else if (axis=="y"){
+		timeseries.swapdimensions(1,3,2);
+	  }
+	  else if (axis=="z"){
+		cout << "The default axis is already z you dummy.  Maximum effort."<< axis << endl;
+	  }
+	  else{
+		cout << "Invalid Axis option for --axis:"<< axis << endl;
+	  }
+	}
 }
 
 
@@ -310,14 +373,54 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 	{
 		//Slice Order File, Default Reference Slice Tested 9/23/16 - Passed
 		//Slice Order File, Custom Reference Slice Tested 9/23 - Passed		
+		
 		// 9/23/16 - Will not Run With Multiband, only slice timing file (User Burden, Deal With It)
+		
 		//Slice Order File, Default Reference Slice Tested 10/10/16 - Passed
 		//Slice Order File, Custom Reference Slice Tested 10/10/16 - Passed
+		
 		// 5/12/17 - Working on glitch in sequential and even odd interleaev (shift times not working)
 		// - completed, Added "else" case that catches when no ref slice or ref time is provided
 		
+		// 6/6/2018 - working on allowing multiband to be used with slice order.
+		// OK here's the problem.  the slice order file is NOT a file that tells you what order a slice was acquired in.
+		// It tells you what the order in which the slices were acquired.  Confused?  Let's take a look:
+		// Note: slice order files are read from top to bottom
+		//
+		// This is the typical slice order format.  It means slice "val" was acquired "row"
+		//
+		//   Row:  Val:
+		//   1     1
+		//   2     3
+		//   3     5
+		//   4     7  
+		//   5     2
+		//   6     4
+		//   7     6
+		//   8     8
+		//
+		//  In this example, "row" indicates the order in which the slices are acquired, "val" indicates the slice number
+		// SO, row 2 val 3 means slice 3 was acquired 2nd.  row 5 val 2 means slice 2 was acquired 5th, and so on
+		//
+		//  Multiband would need the following format, which means slice "row" was acquired "val"
+		//
+		//   Row:  Val:
+		//   1     1
+		//   2     3
+		//   3     2
+		//   4     4  
+		//   5     1
+		//   6     3
+		//   7     2
+		//   8     4
+		//
+		// Now in this case, row 2 val 3 means slice 2 was acquired 3rd.  Row 5 val 1 means slice 5 was acquired 1st
+		// So now I have to make a smart thing to detect if it's multiband. THANKS A LOT YOU JERKS
+		
+		
 		int tmx;
 		float shift;
+		bool multiband=false;
 		
 		try
 		{
@@ -329,27 +432,61 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 			return;
 		}
 		tmx=orders->Maximum();
-		if (orders->Nrows()!=zs)
-		{
-			std::cout<<"Slice order file does not have the correct number of slices"<<std::endl;
-			return;
+		std::cout<<"Max Slice Order: "<<tmx<<std::endl;
+		//if (orders->Nrows()>=zs)
+		//{
+		//	std::cout<<"Slice order file does not have the correct number of slices"<<std::endl;
+		//	return;
+		//}
+		//
+		if (tmx<zs){
+			std::cout<<"Multiband Mode Detected"<<std::endl;
+			multiband=true;
 		}
+		
+		
+		shift=TR.value()*1.0/(tmx+1);
+		
+		
+		// create a time list - the time of the ith acquisition, one value for all z's
+		
 		Matrix TimeList;
-		TimeList.ReSize(zs,1);		
-		shift=TR.value()*1.0/tmx;
-
+		TimeList.ReSize(zs,1);
+		
 		for ( int i=1; i<=zs; i++ )
 		{
 			TimeList(i,1)=(float) (i-1)*shift;
 		}
 
 		// 9/23/16 - Made This loop more efficient
+		// so normally, slice order is row 2 means this slice was acquired 2nd, row 3 means third...etc
+		// BUT the timings file is row 1 is the time of slice 1 acquisiton, row 2 is slice 2 time, etc
+		// so order[3]= slice acquired 3rf, timings[order[3]] is how we index that slice, and
+		// timelist[3] is the time of a slice acquired 3rd.
 		
-		for (int j=1;j<=zs;j++)
-		{			
-			timings->operator()(orders->operator()(j,1),1)=TimeList(j,1);					
+		if (multiband)
+		{
+		  // if we've detected multiband, then we assume that slice order is now "row 2 val 3 means slice 2 was acquired 3rd"
+		  // so order[3] means slice 3 is acquired VAL
+		  // timing [3] is timing of slice 3
+		  // TimeList[order[3]] = time of slice 3
+		  for (int j=1;j<=zs;j++)
+		  {
+			timings->operator()(j,1)=TimeList(orders->operator()(j,1),1);
+		  }
+		}
+		else
+		{
+		  // otherwuse use original algorithm
+		  
+		  for (int j=1;j<=zs;j++)
+		  {			
+			  timings->operator()(orders->operator()(j,1),1)=TimeList(j,1);					
+		  }
 		}
 		
+		// this is reference slice stuff, it shoudl work for multiband, but:
+		// TODO: Make sure ref doesn't fall outside of TR
 		if ( refslice.set() )
 		{		
 			timings->operator-=(timings->operator()(refslice.value(),1));
@@ -358,6 +495,7 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		{
 			timings->operator-=(reftime.value());
 		}
+		
 	}
 	
 	// this is the case if there's just a reference slice given (TR and itl assumed provided)
@@ -493,9 +631,16 @@ int shift_volume()
   if (input.set())
   {
 	
-	if (true) { cout << "Reading input volume" << endl; }
+	if (true) { cout << "Reading input volume" << endl; }  // DO NOT MESS WITH THIS IF STATEMENT ITS VERY IMPORTANT 
 	read_volume4D(timeseries,input.value());
-
+	
+	// If we set which axis we're using, correct for it so the triple for loops will work
+	if ( axis.set() ){
+	  // ADDED 06/06/2018
+	  // Tested
+	  adjust_axis(timeseries,axis.value(),"forward");
+	}
+	
   } else if (out.set()) {
 	cerr << "Must specify an input volume (-i or --in) to generate corrected data." << endl;
 	return -1;
@@ -634,6 +779,17 @@ int shift_volume()
 			}
 		}
 	}
+	
+	
+	  // If we set which axis we're using, un-correct for it sso the volume looks the same as the input
+	if ( axis.set() ){
+	  // ADDED 06/06/2018
+	  // Tested
+	  adjust_axis(timeseries,axis.value(),"reverse");
+	}
+	
+	
+	
 	std::cout<<"Filtering FINISHED - success\n"<<std::endl;
 	std::cout<<"Writing Output Volume"<<std::endl;
 	write_volume4D(timeseries,out.value());
@@ -665,7 +821,7 @@ int main (int argc,char** argv)
 	options.add(reftime);
 	options.add(lpf);
 	options.add(hpf);
-
+	options.add(axis);
 
 	options.parse_command_line(argc, argv);
 
