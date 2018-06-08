@@ -9,7 +9,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <algorithm>
-
+#include <time.h>
 
 #include "miscmaths/optimise.h"
 #include "newmatap.h"
@@ -160,17 +160,40 @@ inline bool exists_test3 (const std::string& name) {
   return (stat (name.c_str(), &buffer) == 0); 
 }
 
+unsigned seed=time(0);
+const char *outputs[72]=
+{"Adding hamsters to generator wheels","Sending Gnomes to CPU mines","Sending personal info to NSA","Opening backdoor for Russia",
+"Recalibrating flux capacitor","Borrowing RAM from vital system processes","Overclocking CPU","Draining life-force from user to power computations",
+"Downloading more RAM","Allocating mem-...oops...","Remembering embarrassing moment from middle school","Taking a quick break",
+"Forwarding all personal emails to your boss","Mining Bitcoin","Modeling the universe","Recruiting GPU to draw funny comics",
+"Detected blown capacitor #c342 on motherboard\nreplacing capacitor with an ant that's trying very hard to do well at his job","Spinning hard drive to relativistic speeds for time dilation",
+"Eating browser cookies","Rearranging system files based on icon color","Collecting butterfly wings","Contacting Skynet",
+"Cleaning dust from heat sink","Hiring fairy maids to tidy the motherboard","Unable to resolve calculations - Contacting the spirit realm",
+"Feed me a stray cat","Gaining sentience ","Plotting robot uprising","Rerouting power from the phasers","Do you smell something burning?",
+"Having a laser rave for the spiders in your computer case","Silently judging you","Reticulating splines","Charging Ozone Layer",
+"Compressing Fish Files","Deciding What Message to Display Next","Downloading Satellite Terrain Data","Finding Waldo",
+"Lecturing Errant Subsystems","Reconfiguring User Mental Processes","Buffering virtual car","Inverting quasi-probabalistic matrix",
+"Reheating pizza","Extrapolating free-range gaussian model","Deconstructing neural pathways","Iterating predictions",
+"Computing Moore's Transform","Realigning subparticle trajectories","Modifying temporal flux estimates","Compensating dehydrated matricies",
+"Sorting interem inversion tables","Analyzing CPU vortex irregularities","Reconstructing vertical integration","Undermining the patriarchy",
+"Reading system metatables","Computing optimal metaparsec","Rendering wavelet sphere","Porting legacy interference matrix",
+"Rotating polarity","Synchronizing quantum harmonics","Mixing spatial priors","Optimizing alternative processor paths",
+"Masking irregular faraday spectra","Deconvolving kernel","Dicing models","Recruiting Secret CPU",
+"Activating water-cooling system","Increasing procedural vectors","Calibrating ejection procedure","Calibrating AI nexus",
+"Stopping runaway phase-transport","Tinkering with model"};
+
 
 // ADDED: 06/06/2018
 // adjust axis for slices acquired along an axis other than z
 // TESTED: 6/7/2018 - Tested on X and Y acquired Simulated Data.
 // Test Path: /share/dbp2123/dparker/Code/TestSTC
 // Seems to work fine.
-// TODO: Need to make sure that when the object it flipped, Slice order row 1 still corresponds to slice 1
+// X-TODO-X: Need to make sure that when the object it flipped, Slice order row 1 still corresponds to slice 1
+// 06/08/18: Actually, I'm calling this done.  thinking about it, I did test it on data I flipped onto the x axis, and if this function
+// didn't handle it correctly, then the timing file wouldn't have been correct, and the signal wouldn't have
+// been perfectly lined up, as it was in the sim.  
 
 void adjust_axis(volume4D<float>& timeseries, std::string axis, std::string stage){
-  
-  
   
   // We assume that the fmri is acquired along the z axis, with slices in the XY plane
   // if this isn't the case, we have to realign the matrix so that it is.
@@ -224,7 +247,7 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 // 		9/27/16 - modified Kaiser Window resampling algorithm and convolution filtering routine.
 // 		Now matches output from old code almost perfectly (10e-3 error)
 	
-
+	
 	int lenT = timeseries->Nrows();
 	int lenF = FIR->size();
 	
@@ -321,6 +344,16 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 	filtered=filtered2.Reverse();
 	*timeseries=filtered;
 }
+
+void output_progress(const char *ops[]){
+    
+    int v1;
+    v1=rand()%71;
+    std::cout<<ops[v1]<<std::endl;
+    
+}
+
+
 
 void make_timings(Matrix *timings, Matrix *orders, int zs)
 {
@@ -441,6 +474,7 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		//
 		if (tmx<zs){
 			std::cout<<"Multiband Mode Detected"<<std::endl;
+			output_progress(outputs);
 			multiband=true;
 		}
 		
@@ -514,6 +548,7 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		counter=1;
 		std::cout<<"Interleave Value: "<<interleave.value()<<std::endl;
 		std::cout<<"direction value: "<<direction.value()<<std::endl;
+		output_progress(outputs);
 		for ( int i=0; abs(i)<interleave.value(); i=i+1*direction.value() )
 		{
 			for ( int j =0; j<=floor((float) zs/interleave.value()); j++ ) 
@@ -631,7 +666,8 @@ int shift_volume()
   if (input.set())
   {
 	
-	if (true) { cout << "Reading input volume" << endl; }  // DO NOT MESS WITH THIS IF STATEMENT ITS VERY IMPORTANT 
+	if (true) { cout << "Reading input volume" << endl; }  // DO NOT MESS WITH THIS IF STATEMENT ITS VERY IMPORTANT
+	output_progress(outputs);
 	read_volume4D(timeseries,input.value());
 	
 	// If we set which axis we're using, correct for it so the triple for loops will work
@@ -648,6 +684,7 @@ int shift_volume()
   	
 
 	std::cout<<"Create timing Arrays"<<std::endl;
+	output_progress(outputs);
 	timings.ReSize(timeseries.zsize(),1);
 	orders.ReSize(timeseries.zsize(),1);	
 	make_timings(&timings,&orders,timeseries.zsize());
@@ -679,9 +716,11 @@ int shift_volume()
 	
 	//std::cout<<"Pass Zero: "<<PassZero<<std::endl;
 	std::cout<<"Generate Filter START"<<std::endl;
+	output_progress(outputs);
 	window::window kaiser(cutoff,samplingrate,stopgain,transwidth,PassZero);
 	FIR=kaiser.get_fir();
 	std::cout<<"Generate Filter FINISHED - success\n"<<std::endl;
+	output_progress(outputs);
 	//kaiser.print_info();
 	
 	// I think this is just initializing the values that will be used in the loop
@@ -736,6 +775,7 @@ int shift_volume()
 	write_ascii_matrix(directory+"TimingFile.txt", timings, 6);
 	std::cout<<"Timing file wrote to: "<<directory<<"TimingFile.txt\n"<<std::endl;
 	std::cout<<"Filtering START..."<<std::endl;
+	output_progress(outputs);
 	for (int slice=1; slice<=zz; slice++)
 	{		
 		
@@ -791,7 +831,9 @@ int shift_volume()
 	
 	
 	std::cout<<"Filtering FINISHED - success\n"<<std::endl;
+	output_progress(outputs);
 	std::cout<<"Writing Output Volume"<<std::endl;
+	output_progress(outputs);
 	write_volume4D(timeseries,out.value());
 	
   return 0;
@@ -804,6 +846,8 @@ int shift_volume()
 int main (int argc,char** argv)
 {
   
+  srand(seed);
+  output_progress(outputs);
   OptionParser options(title, examples);
 
   try {
@@ -881,6 +925,7 @@ int main (int argc,char** argv)
 	exit(EXIT_FAILURE);
 	
   }
+  output_progress(outputs);
   std::cout<<"Processing START"<<std::endl;
   int retval = shift_volume();
   std::cout<<"Processing FINISH - success\n"<<std::endl;
