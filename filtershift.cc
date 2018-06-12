@@ -105,8 +105,8 @@ Option<float> cf(string("--cf"),0.21,string(
 				  false,requires_argument);
 
 Option<string> timing(string("--timing"), string(""),string(
-	  "\t Slice Timing File.  This file is the time at which\
-\n\t\t\t each slice\ was acquired relative to the first slice.\
+	 " Slice Timing File.  This file is the time at which\
+\n\t\t\t each slice was acquired relative to the first slice.\
 \n\t\t\t each row represents the time at which that slice was\
 \n\t\t\t acquired. For example, '0' in the first row means\
 \n\t\t\t that slice 1 was acquired first, and will be shifted 0\
@@ -148,6 +148,10 @@ Option<string> axis(string("--axis"), string("z"),string(
 	   " Sets the axis along which slices are\
 \n\t\t\t acquired.  Options are 'x', 'y', or 'z'.\
 \n\t\t\t Default direction is 'z' \n"),false, requires_argument);
+
+Option<bool> hires(string("--hires"),false,string(
+		" Saves the data in high temporal resolution (20Hz)\
+\n\t\t\t  NOTE: this will result in large file sizes\n"),false,no_argument);
 
 				  
 Option<bool> help(string("-h,--help"), false,
@@ -256,100 +260,102 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 		std::cout<<"Filter Order too high.  There aren't enough time points in your image."<< std::endl;
 		return;
 	}
-		
-	std::vector<int> SamplePoints;
-	
-	for (int i=1;i<=lenF-skip;i+=skip)
-	{
-		SamplePoints.insert(SamplePoints.end(),i);
-	}
-	
-	int firLen=SamplePoints.size();	
-	std::vector<float> pFIR;
-	pFIR.assign(FIR->begin(),FIR->end());
-	std::vector<float> padd;
-	padd.reserve(std::abs(shift));	
-	int ModSample=std::abs(shift);
-	
-	// If the shift if positive (shifting the signal to the right), then we want to DELAY the filter, add zeros to the END (Right hand side)		
 	
 
-	padd.assign(std::abs(shift),pFIR.back());
-	//std::cout<<"shift:\t"<<shift<<std::endl;
-	//std::cout<<"padd:"<<std::endl;
-	//std::cout<<padd<<std::endl;
-	pFIR.insert(pFIR.end(),padd.begin(),padd.end());
+	  std::vector<int> SamplePoints;
+	  
+	  for (int i=1;i<=lenF-skip;i+=skip)
+	  {
+		  SamplePoints.insert(SamplePoints.end(),i);
+	  }
+	  
+	  int firLen=SamplePoints.size();	
+	  std::vector<float> pFIR;
+	  pFIR.assign(FIR->begin(),FIR->end());
+	  std::vector<float> padd;
+	  padd.reserve(std::abs(shift));	
+	  int ModSample=std::abs(shift);
+	  
+	  // If the shift if positive (shifting the signal to the right), then we want to DELAY the filter, add zeros to the END (Right hand side)		
+	  
+  
+	  padd.assign(std::abs(shift),pFIR.back());
+	  //std::cout<<"shift:\t"<<shift<<std::endl;
+	  //std::cout<<"padd:"<<std::endl;
+	  //std::cout<<padd<<std::endl;
+	  pFIR.insert(pFIR.end(),padd.begin(),padd.end());
+	  
+	  
+	  if (shift<0)
+	  {
+		  std::reverse(pFIR.begin(),pFIR.end());
+		  ModSample=0;
+	  }
+	   
+	  
+	  ColumnVector FIR_down_shift;
+	  ColumnVector FIR_down;
+	  FIR_down_shift.ReSize(firLen);
+	  FIR_down.ReSize(firLen);
+	  lenF=FIR_down_shift.Nrows();	
+	  firLen=1;
+	  
+	  for (unsigned i = 0; i< SamplePoints.size(); i++)
+	  {
+		  FIR_down(firLen)=FIR->operator[](SamplePoints[i]);
+		  SamplePoints[i]+=ModSample;
+		  FIR_down_shift(firLen)=pFIR[SamplePoints[i]];
+		  firLen+=1;
+	  }
+	  
+	  // If the shift if negative (shifting the signal to the left), then we want to add the zeros to the beginning (flip the signal)		
+  
+	  
+	  
+	  ColumnVector filtered;
+	  filtered.ReSize(lenT);	
+	  int startT = floor(lenF/2);	
+	  int maxT = lenT-lenF-1;
+	  float FiltSum=0;
+  
+	  for (int i = 0; i<maxT; i++)
+	  {
+		  FiltSum=0;
+  
+		  for (int f = 1; f<=lenF; f++)
+		  {
+			  FiltSum+=FIR_down_shift(f)*timeseries->operator()(i+f);
+		  }
+		  
+		  filtered(i+startT)=FiltSum;		
+	  }
+  
+	  ColumnVector filtered2;
+	  filtered=filtered.Reverse();
+	  filtered2=filtered;
+	  
+	  for (int i = 0; i<maxT; i++)
+	  {
+		  FiltSum=0;
+		  
+		  for (int f = 1; f<=lenF; f++)
+		  {
+			  FiltSum+=FIR_down(f)*filtered(i+f);
+		  }
+		  
+		  filtered2(i+startT)=FiltSum;
+	  }
+	  
+	  filtered=filtered2.Reverse();
+	  *timeseries=filtered;
 	
-	
-	if (shift<0)
-	{
-		std::reverse(pFIR.begin(),pFIR.end());
-		ModSample=0;
-	}
-	 
-	
-	ColumnVector FIR_down_shift;
-	ColumnVector FIR_down;
-	FIR_down_shift.ReSize(firLen);
-	FIR_down.ReSize(firLen);
-	lenF=FIR_down_shift.Nrows();	
-	firLen=1;
-	
-	for (unsigned i = 0; i< SamplePoints.size(); i++)
-	{
-		FIR_down(firLen)=FIR->operator[](SamplePoints[i]);
-		SamplePoints[i]+=ModSample;
-		FIR_down_shift(firLen)=pFIR[SamplePoints[i]];
-		firLen+=1;
-	}
-	
-	// If the shift if negative (shifting the signal to the left), then we want to add the zeros to the beginning (flip the signal)		
-
-	
-	
-	ColumnVector filtered;
-	filtered.ReSize(lenT);	
-	int startT = floor(lenF/2);	
-	int maxT = lenT-lenF-1;
-	float FiltSum=0;
-
-	for (int i = 0; i<maxT; i++)
-	{
-		FiltSum=0;
-
-		for (int f = 1; f<=lenF; f++)
-		{
-			FiltSum+=FIR_down_shift(f)*timeseries->operator()(i+f);
-		}
-		
-		filtered(i+startT)=FiltSum;		
-	}
-
-	ColumnVector filtered2;
-	filtered=filtered.Reverse();
-	filtered2=filtered;
-	
-	for (int i = 0; i<maxT; i++)
-	{
-		FiltSum=0;
-		
-		for (int f = 1; f<=lenF; f++)
-		{
-			FiltSum+=FIR_down(f)*filtered(i+f);
-		}
-		
-		filtered2(i+startT)=FiltSum;
-	}
-	
-	filtered=filtered2.Reverse();
-	*timeseries=filtered;
 }
 
 void output_progress(const char *ops[]){
     
     int v1;
     v1=rand()%71;
-    std::cout<<ops[v1]<<std::endl;
+    //std::cout<<ops[v1]<<std::endl;
     
 }
 
@@ -658,29 +664,231 @@ int shift_volume()
 		return -1;
 	}
 	
-	volume4D<float> timeseries;
+	
 	Matrix timings;
 	Matrix orders;
 	std::vector<float> FIR;
 	
-  if (input.set())
-  {
+//######################################################################################################
+// input stuff incase Ray wants 20Hz.  I'm not clever enough to do this a different way.
+// 06/08/2018 - Adding hires part.  I've decided to just filter in highres, 
+//######################################################################################################
+	int no_volumes = 0; 
+	int xx = 0;
+	int yy = 0;
+	int zz = 0;
+	int HRhi=20;
+	volume4D<float> timeseries;
 	
-	if (true) { cout << "Reading input volume" << endl; }  // DO NOT MESS WITH THIS IF STATEMENT ITS VERY IMPORTANT
-	output_progress(outputs);
-	read_volume4D(timeseries,input.value());
-	
-	// If we set which axis we're using, correct for it so the triple for loops will work
-	if ( axis.set() ){
-	  // ADDED 06/06/2018
-	  // Tested
-	  adjust_axis(timeseries,axis.value(),"forward");
+/////////// If I want 20Hz:
+	if (hires.set())
+	{
+	  
+	  volume4D<float> origtimeseries;
+	  
+	  //timeseries.destroy();
+	  
+	  
+	  if (input.set())
+	  {
+		
+		if (true) { cout << "Reading input volume" << endl; }  // DO NOT MESS WITH THIS IF STATEMENT ITS VERY IMPORTANT
+		output_progress(outputs);
+		read_volume4D(origtimeseries,input.value());
+		//std::cout<<"Read Input Volume"<<std::endl;
+		
+		
+		// If we set which axis we're using, correct for it so the triple for loops will work
+		if ( axis.set() ){
+		  // ADDED 06/06/2018
+		  // Tested and passed
+		  adjust_axis(origtimeseries,axis.value(),"forward");
+		}
+		
+		
+		
+		//origtimeseries=origtimeseries-origtimeseries.min();
+		//origtimeseries=origtimeseries/origtimeseries.max();
+		//origtimeseries=origtimeseries*500000;
+		 
+		int orig_t = origtimeseries.tsize();
+		xx = origtimeseries.xsize();
+		yy = origtimeseries.ysize();
+		zz = origtimeseries.zsize();
+		
+		
+		//std::cout<<"orig_t:\t"<<orig_t<<std::endl;
+		//std::cout<<"TR.value():\t"<<TR.value()<<std::endl;
+		//std::cout<<"HRhi:\t"<<HRhi<<std::endl;
+		//std::cout<<"calculated size:\t"<<round((orig_t)*TR.value()*HRhi)<<std::endl;
+		//std::cout<<timeseries.xsize()<<" "<<timeseries.ysize()<<" "<<timeseries.zsize()<<" "<<timeseries.tsize()<<std::endl;
+		//
+		
+		timeseries.reinitialize(xx,yy,zz,round((orig_t+1)*TR.value()*HRhi));
+		
+		
+		//std::cout<<timeseries.xsize()<<" "<<timeseries.ysize()<<" "<<timeseries.zsize()<<" "<<timeseries.tsize()<<std::endl;
+		//std::cout<<"Declared INT vol4d"<<std::endl;
+		
+		no_volumes = timeseries.tsize();
+		
+		//std::cout<<"NumVols:"<<std::endl;
+		//std::cout<<no_volumes<<std::endl;
+		
+		int skip=(int) round(TR.value()*HRhi);
+		std::vector<int> SamplePoints;
+		  int lasti=0;
+		  for (int i=1;i<=no_volumes-skip;i+=skip)
+		  {
+			SamplePoints.insert(SamplePoints.end(),i);
+			lasti=i;
+			
+		  }
+
+		
+		ColumnVector newtimeseries = timeseries.voxelts(1,1,1);
+		ColumnVector oldtimeseries = origtimeseries.voxelts(1,1,1);
+		
+		//std::cout<<"Max SampPoint:"<<std::endl;
+		//std::cout<<lasti<<std::endl;
+		//  
+		//std::cout<<"int TS size:"<<std::endl;  
+		//std::cout<<timeseries.xsize()<<" "<<timeseries.ysize()<<" "<<timeseries.zsize()<<" "<<timeseries.tsize()<<std::endl;
+		//
+		//  
+		//  
+		//std::cout<<"Generated SamplePoints Vector"<<std::endl;		
+		//std::cout<<"Generated TS column vectors"<<std::endl;
+		//std::cout<<"Newtimeseries size:"<<std::endl;
+		//std::cout<<newtimeseries.Nrows()<<std::endl;
+		//std::cout<<"oldtimeseries size:"<<std::endl;
+		//std::cout<<oldtimeseries.Nrows()<<std::endl;
+		//
+		//std::cout<<"N SampPoint:"<<std::endl;
+		//std::cout<<SamplePoints.size()<<std::endl;
+		//
+		//std::cout<<"orig volume size:"<<std::endl;
+		//std::cout<<origtimeseries.xsize()<<" "<<origtimeseries.ysize()<<" "<<origtimeseries.zsize()<<" "<<origtimeseries.tsize()<<std::endl;
+		////for (int slice=0; slice<zz; slice++)
+		////{		
+		////	//std::cout<<"1";
+		////	for (int x_pos = 0; x_pos < xx; x_pos++)
+		////	{
+		////		//std::cout<<"2";
+		////		for (int y_pos = 0; y_pos < yy; y_pos++)
+		////		{
+		////		  //std::cout<<"3";
+		////			for (int t_pos = 0; t_pos<SamplePoints.size(); t_pos++)
+		////			{
+		////			  //newtimeseries=0;
+		////			  //std::cout<<"4";
+		////			  oldtimeseries=origtimeseries.voxelts(x_pos,y_pos,slice);
+		////			  //std::cout<<t_pos<<std::endl;
+		////			  //std::cout<<SamplePoints[t_pos]<<std::endl;
+		////			  //
+		////			  //std::cout<<"newtimeseries samplepoints:"<<std::endl;
+		////			  ////std::cout<<newtimeseries(SamplePoints[t_pos])<<std::endl;
+		////			  //
+		////			  //std::cout<<"oldtimeseries t_pos:"<<std::endl;
+		////			  //std::cout<<oldtimeseries(t_pos+1)<<std::endl;
+		////			  
+		////			  newtimeseries(SamplePoints[t_pos])=oldtimeseries(t_pos+1);
+		////			  //std::cout<<"b";
+		////			  timeseries.setvoxelts(newtimeseries,x_pos,y_pos,slice);
+		////			  //std::cout<<"c"<<std::endl;
+		////			}
+		////		}
+		////	}
+		////}
+
+		for (int t_pos = 0; t_pos<SamplePoints.size(); t_pos++)
+		{
+		  //volume<int> intvol;
+		  //copyconvert(origtimeseries[t_pos],intvol);
+		  timeseries[SamplePoints[t_pos]]=origtimeseries[t_pos];
+		  //timeseries.nsertvolume(origtimeseries[t_pos],SamplePoints[t_pos]);
+		  //newtimeseries=0;
+		  //std::cout<<"4";
+		  //oldtimeseries=origtimeseries.voxelts(x_pos,y_pos,slice);
+		  ////std::cout<<t_pos<<std::endl;
+		  ////std::cout<<SamplePoints[t_pos]<<std::endl;
+		  ////
+		  ////std::cout<<"newtimeseries samplepoints:"<<std::endl;
+		  //////std::cout<<newtimeseries(SamplePoints[t_pos])<<std::endl;
+		  ////
+		  ////std::cout<<"oldtimeseries t_pos:"<<std::endl;
+		  ////std::cout<<oldtimeseries(t_pos+1)<<std::endl;
+		  //
+		  //newtimeseries(SamplePoints[t_pos])=oldtimeseries(t_pos+1);
+		  ////std::cout<<"b";
+		  //timeseries.setvoxelts(newtimeseries,x_pos,y_pos,slice);
+		  //std::cout<<"c"<<std::endl;
+		}
+
+		std::cout<<"Hires Image Created"<<std::endl;
+		std::cout<<"int TS size:"<<std::endl;  
+		std::cout<<timeseries.xsize()<<" "<<timeseries.ysize()<<" "<<timeseries.zsize()<<" "<<timeseries.tsize()<<std::endl;	  
+	  
+	  } else if (out.set()) {
+		cerr << "Must specify an input volume (-i or --in) to generate corrected data." << endl;
+		return -1;
+	  }
+	  
+	  
+	  
+	  
 	}
 	
-  } else if (out.set()) {
-	cerr << "Must specify an input volume (-i or --in) to generate corrected data." << endl;
-	return -1;
-  }
+////////// Otherwise do the normal thing:
+	else
+	{
+	  //volume4D<float> timeseries;
+	    if (input.set())
+		{
+		  
+		  if (true) { cout << "Reading input volume" << endl; }  // DO NOT MESS WITH THIS IF STATEMENT ITS VERY IMPORTANT
+		  output_progress(outputs);
+		  read_volume4D(timeseries,input.value());
+		  
+		  
+		  
+		  // If we set which axis we're using, correct for it so the triple for loops will work
+		  if ( axis.set() ){
+			// ADDED 06/06/2018
+			// Tested
+			adjust_axis(timeseries,axis.value(),"forward");
+		  }
+		no_volumes = timeseries.tsize(); 
+		xx = timeseries.xsize();
+		yy = timeseries.ysize();
+		zz = timeseries.zsize();
+		  
+		} else if (out.set()) {
+		  cerr << "Must specify an input volume (-i or --in) to generate corrected data." << endl;
+		  return -1;
+		}
+	  
+	}
+
+	
+//######################################################################################################
+// END
+//######################################################################################################
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
   	
 
 	std::cout<<"Create timing Arrays"<<std::endl;
@@ -692,18 +900,26 @@ int shift_volume()
 	string Output=out.value();
 	string directory=Output.substr(0,Output.find_last_of('/')+1);
 	
-	int no_volumes = timeseries.tsize();
-	int xx = timeseries.xsize();
-	int yy = timeseries.ysize();
-	int zz = timeseries.zsize();
+	
+
 	
 	float cutoff=cf.value();
+	
 	float samplingrate=(float) (zz/TR.value());
+	
+
+	
 	float stopgain=-28;
 	double transwidth=.1;
 	int PassZero=1;
 	int skip=samplingrate*TR.value();
 	
+	if (hires.set())
+	{
+	  samplingrate=HRhi;
+	  skip=1;
+	  
+	}	
 	
 	// 01/16/17 - HPF can't operate the same way LPF does (on zero-padded data), so just filter normally.
 	// 01/16/17 - Testing HPF operation now...
@@ -722,13 +938,26 @@ int shift_volume()
 	std::cout<<"Generate Filter FINISHED - success\n"<<std::endl;
 	output_progress(outputs);
 	//kaiser.print_info();
-	
+	//std::cout<<"int TS size:"<<std::endl;  
+	//std::cout<<timeseries.xsize()<<" "<<timeseries.ysize()<<" "<<timeseries.zsize()<<" "<<timeseries.tsize()<<std::endl;
 	// I think this is just initializing the values that will be used in the loop
 	ColumnVector voxeltimeseries = timeseries.voxelts(1,1,1);
+	//std::cout<<"voxelts\n"<<std::endl;
+	//std::cout<<voxeltimeseries.Nrows()<<std::endl;
 	ColumnVector fliptimeseries = voxeltimeseries.Reverse();
+	//std::cout<<"MAde flipts\n"<<std::endl;
 	ColumnVector cattimeseries;
 	
+	//std::cout<<"fliptimeseries nrows:"<<std::endl;
+	//std::cout<<fliptimeseries.Nrows()<<std::endl;
+	
+	
 	fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);
+	
+	
+	//std::cout<<fliptimeseries.Nrows()<<std::endl;
+	//std::cout<<"flipts\n"<<std::endl;
+	
 	
 	int lents=fliptimeseries.Nrows();
 	int rangelh;
@@ -756,7 +985,14 @@ int shift_volume()
 	{
 		return 1;
 	}
-
+	//
+	//std::cout<<"rangelh:\t"<<rangelh<<std::endl;
+	//std::cout<<"rangerh:\t"<<rangerh<<std::endl;
+	//std::cout<<"cutLeft:\t"<<cutLeft<<std::endl;
+	//std::cout<<"cutRight:\t"<<cutRight<<std::endl;
+	//std::cout<<"no_volumes:\t"<<no_volumes<<std::endl;
+	//
+	
 	float span;
 	float mn;
 	float mn2;
@@ -813,8 +1049,10 @@ int shift_volume()
 					  cattimeseries*=span;
 					  cattimeseries+=mn;
 					}					
-					
+					//std::cout<<"resetting TS"<<std::endl;
+					//std::cout<<cattimeseries.Nrows()<<std::endl;
 					timeseries.setvoxelts(cattimeseries,x_pos,y_pos,slice-1);
+					//std::cout<<"Done"<<std::endl;
 				}
 			}
 		}
@@ -832,6 +1070,13 @@ int shift_volume()
 	
 	std::cout<<"Filtering FINISHED - success\n"<<std::endl;
 	output_progress(outputs);
+	
+	
+
+	
+	
+
+	
 	std::cout<<"Writing Output Volume"<<std::endl;
 	output_progress(outputs);
 	write_volume4D(timeseries,out.value());
@@ -866,7 +1111,8 @@ int main (int argc,char** argv)
 	options.add(lpf);
 	options.add(hpf);
 	options.add(axis);
-
+	options.add(hires);
+	
 	options.parse_command_line(argc, argv);
 
 	if ( (help.value()) || (!options.check_compulsory_arguments(true)) )
