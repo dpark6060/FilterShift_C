@@ -46,16 +46,6 @@ window::window(float co, float sr, float sg, double tw, int pz, float TR):cutoff
     FIR.reserve(N);
     
 }
-//
-//
-//void window::kaiser_atten (int numtaps, float width){
-//    
-//    
-//    a = 2.285 * (numtaps - 1) * PI * width + 7.95
-//    
-//    
-//}
-//
 
 
 
@@ -140,10 +130,7 @@ std::vector<float> window::get_fir(){
     
     kaiserord(StopGain,TranWidth/Nyq); // given our StopGain and transition width, calculate the order (Sets N and Beta)
     bool odd=N&1;
-    //#pass_nyquist=odd^PassZero;
-    
-    //std::cout<<N<<std::endl;
-    //std::cout<<odd<<std::endl;
+
     
     std::cout<<"Creating Window Function..."<<std::endl;
     
@@ -258,10 +245,10 @@ std::vector<float> window::get_fir(){
     //    FIR[i]=FIR[i]-s;
     //}
     
-    std::ofstream output_file("/home/dparker/Desktop/FIRtest.txt");
-    output_file.precision(32);
-    std::ostream_iterator<float> output_iterator(output_file,"\n");
-    std::copy(FIR.begin(),FIR.end(),output_iterator);
+    //std::ofstream output_file("/home/dparker/Desktop/FIRtest.txt");
+    //output_file.precision(32);
+    //std::ostream_iterator<float> output_iterator(output_file,"\n");
+    //std::copy(FIR.begin(),FIR.end(),output_iterator);
 
     
     return FIR;
