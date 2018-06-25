@@ -20,30 +20,33 @@ Filtershift is a slice timing correction routine.  If you use Filtershift in you
 #### Slice Order:
 This is the typical slice order format. "Row" indicates the order in which the slices are acquired (Slice acquired 1st, slice acquired 2nd, etc), "val" indicates the physical slice index that was acquired.
 
-  Row:  Val:
-  1     1
-  2     3
-  3     5
-  4     7  
-  5     2
-  6     4
-  7     6
-  8     8
+|Row|Val|
+|--|--| 
+  |1|1|
+  |2|3|
+  |3|5|
+  |4|7|
+  |5|2|
+  |6|4|
+  |7|6|
+  |8|8|
 
  In this example, row 2 - val 3 means slice 3 was acquired 2nd.  row 5 - val 2 means slice 2 was acquired 5th, and so on
 
 #### Slice Timing
 This is the typical slice timing format.  "Row" indicates the physical slice index, and "Val" indicates the time at which that slice was acquired. For example, row 1 is the time of slice 1's acquisition, row 2 is the time of slice 2's acquisition, etc
 
-  Row:  Val:
-  1     0.000
-  2     0.500
-  3     0.033
-  4     0.533  
-  5     0.066
-  6     0.566
-  7     0.100
-  8     0.600
+  |Row|Val|
+|--|--| 
+  |1|0.000|
+  |2|0.500|
+  |3|0.033|
+  |4|0.533|
+  |5|0.066|
+  |6|0.566|
+  |7|0.100|
+  |8|0.600|
+
 
 Now in this case, row 2 val 0.500 means slice 2 was acquired 0.500 seconds after the first slice acquired in the volume.  Row 5 val 0.066 means slice 5 was acquired 0.066 seconds after the start of the first slice slice acquired in the volume.
 
@@ -52,15 +55,17 @@ Now in this case, row 2 val 0.500 means slice 2 was acquired 0.500 seconds after
 #### Slice Timing
 Multiband works fine with a slice timing file.  You just manually set the time that each slice was acquired in a way that accounts for the simultaneous acquisition of multiple slices.  For example:
 
-  Row:  Val:
-  1     0.000
-  2     0.666
-  3     0.333
-  4     1.000  
-  5     0.000
-  6     0.666
-  7     0.333
-  8     1.000
+|Row|Val|
+|--|--| 
+  |1|0.000|
+  |2|0.666|
+  |3|0.333|
+  |4|1.000|
+  |5|0.000|
+  |6|0.666|
+  |7|0.333|
+  |8|1.000|
+
   
   This will correctly account for slices 1, 4, and 7 being acquired simultaneously at time 0.000s, slices 3 and 6 being acquired simultaneously at time 0.500s, and slices 2, 5, and 8 being acquired simultaneously at time 1.000s.
   
@@ -68,16 +73,18 @@ Multiband works fine with a slice timing file.  You just manually set the time t
 The program can detect a multiband slice order file.  The format of the multiband slice order file is fundamentally different from the slice order file for a sequential volume.  Please read the descriptions of each, and ensure that you fully understand the differences.
 
  Multiband slice order files use the following format, which means slice "row" was acquired "val"
-
-  Row:  Val:
-  1     1
-  2     3
-  3     2
-  4     4  
-  5     1
-  6     3
-  7     2
-  8     4
+ 
+|Row|Val|
+|--|--| 
+  |1|1|
+  |2|3|
+  |3|2|
+  |4|4|
+  |5|1|
+  |6|3|
+  |7|2|
+  |8|4|
+ 
 
 Now in this case, row 2 val 3 means slice 2 was acquired 3rd.  Row 5 val 1 means slice 5 was acquired 1st.  Note that this example is equivalent to the example given for the multiband slice Timing file.  You would basically put the order in if you were too lazy to just calculate the time shifts yourself.  Yes, I'm looking at you. 
 
