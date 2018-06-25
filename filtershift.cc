@@ -10,14 +10,17 @@
 #include <unistd.h>
 #include <algorithm>
 #include <time.h>
+//#include <random>
 
 #include "miscmaths/optimise.h"
+#include "miscmaths/miscprob.h"
 #include "newmatap.h"
 #include "newmatio.h"
 #include "newimage/newimageall.h"
 #include "utils/options.h"
 #include "miscmaths/kernel.h"
 #include "Window.h"
+
 
 using namespace MISCMATHS;
 using namespace NEWMAT;
@@ -153,7 +156,10 @@ Option<bool> hires(string("--hires"),false,string(
 		" Saves the data in high temporal resolution (20Hz)\
 \n\t\t\t  NOTE: this will result in large file sizes\n"),false,no_argument);
 
-				  
+Option<bool> verbose(string("-v"),false,string(
+		" Includes additional output messages\n"),false,no_argument);
+
+	  
 Option<bool> help(string("-h,--help"), false,
 		string(" display this message\n"),
 		false, no_argument);
@@ -165,7 +171,12 @@ inline bool exists_test3 (const std::string& name) {
 }
 
 unsigned seed=time(0);
-const char *outputs[72]=
+
+
+using namespace std;
+
+
+const char *oneoff[72]=
 {"Adding hamsters to generator wheels","Sending Gnomes to CPU mines","Sending personal info to NSA","Opening backdoor for Russia",
 "Recalibrating flux capacitor","Borrowing RAM from vital system processes","Overclocking CPU","Draining life-force from user to power computations",
 "Downloading more RAM","Allocating mem-...oops...","Remembering embarrassing moment from middle school","Taking a quick break",
@@ -185,6 +196,29 @@ const char *outputs[72]=
 "Masking irregular faraday spectra","Deconvolving kernel","Dicing models","Recruiting Secret CPU",
 "Activating water-cooling system","Increasing procedural vectors","Calibrating ejection procedure","Calibrating AI nexus",
 "Stopping runaway phase-transport","Tinkering with model"};
+
+
+const char *verbs[59]=
+{"Activating","Agitating","Analyzing","Borrowing","Buffering","Calibrating","Charging","Cleaning","Collecting","Computing","Contacting","Detecting","Deconvolve",
+"Depleting","Dicing","Downloading","Draining","Eating","Extracting","Finding","Forwarding","Gaining","Hiring","Implanting","Increasing","Integrating","Inverting",
+"Iterating","Lecturing","Masking","Mining","Mixing","Modeling","Mylenating","Opening","Optimizing","Plotting","Porting","Reading","Rearranging","Recalibrating",
+"Reconstructing","Recruiting","Rehabilitating","Reheating","Reintegrating","Remembering","Rendering","Rerouting","Resurrecting","Reticulating","Rotating","Sending",
+"Solving For","Spinning","Stopping","Synchronizing","Teathering","Tinkering With"};
+const char *adjectives[55]=
+{"Alternative","Aquatic","Auxiliary","Backdoor","Blown","Dehydrated","Ejection","Errant","Faraday","Flux","Free-range","Frightened","Gaussian","Interim","Interference","Irregular",
+"Legacy","Monotonic","Neural","Optimal","Organic","Overloaded","Personal","Primary","Procedural","Quantum","Quasi-probabalistic","Quick","Relativistic","Righteous","Runaway",
+"Satellite","Secret","Sentient","System","Temporal","Vertical","Virtual","Water-cooled","Legendary","Elemental","Wireless","Argumentative","Mylenated","Agitated","Undercover",
+"Spiritual","Depleted","Eigen","Marxist","Incendiary","Unnecessary","Sacrificial","Enlightened","Spatial"};
+const char *nouns[46]=
+{"Bitcoin","Butterfly Wings","Calculations","Capacitors","Comics","Computations","Cookies","Cpu","Estimate","Files","Gnomes","Hamsters","Harmonics","Heat Sink","Inversion Tables",
+"Matrices","Metatables","Models","Motherboard","Ozone Layer","Paths","Pathways","Patriarchy","Phasers","Pizza","Polarity","Predictions","Procedures","Ram","Robot Uprising",
+"Russians","Satellite Terrain Data","Skynet","Spirit Realm","Splines","Subsystems","System Processes","Time Dilation","Transform","Universe","Wavelets","Marsupials","Doorman",
+"Power Cells","Human Suffering","Priors"};
+const char *adverbs[27]=
+{"Aggressively","Barely","Begrudgingly","Gently","Happily","Hastily","Quickly","Unenthusiastically","Timidly","Confidently","Imaginatively","Patiently","Thoroughly","Proficiently",
+"Significantly","Roughly","Deliberately","Over-confidently","Majestically","Vivaciously","Vainly","Vaguely","Vacantly","Judgmentally","Frantically","Awkwardly","Carelessly"};
+
+
 
 
 // ADDED: 06/06/2018
@@ -242,6 +276,7 @@ void adjust_axis(volume4D<float>& timeseries, std::string axis, std::string stag
 		cout << "Invalid Axis option for --axis:"<< axis << endl;
 	  }
 	}
+
 }
 
 
@@ -351,12 +386,466 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 	
 }
 
-void output_progress(const char *ops[]){
-    
-    int v1;
-    v1=rand()%71;
-    //std::cout<<ops[v1]<<std::endl;
-    
+  int mod(int a,int b) {
+	int c = a % b;
+	return (c < 0) ? c + b : c;
+  }
+void make_timeseries20hz_TEST(volume4D<float> *timeseries, volume4D<float> *timeseries20hz, std::vector<float> *FIR, float TR, float Hf, int padlen)
+{
+  //filter_timeseries20hz(&cattimeseries, &FIR, &timings20hz)
+	
+// 		9/27/16 - modified Kaiser Window resampling algorithm and convolution filtering routine.
+// 		Now matches output from old code almost perfectly (10e-3 error)
+	
+	
+	int xx=timeseries->xsize();
+	int yy=timeseries->ysize();
+	int zz=timeseries->zsize();
+	int lenT = timeseries->tsize();
+	int lenF = FIR->size();
+	int lenT20 = timeseries20hz->tsize();
+	
+	float skip = Hf*TR;
+	int intskip=int(round(skip));
+	float tspan = lenF/Hf;
+	//int nspan = floor(lenF/(Hf*TR));
+	float firStart=1*tspan/2.0;
+	//float firEnd=tspan/2.0;
+	//int nstart=padlen;
+	
+	int nlow=0;
+	int nhigh=0;
+	int ntotal=(int) floor(tspan/TR-1);
+	//float t2ind_slope=
+	float toffset=padlen*TR;
+	int shift=0;
+	  
+	//volume<float> currentsum(xx,yy,zz);
+	float currentsum;
+	volume<int> currentsumInt(xx,yy,zz);
+	
+	//for (int i=0; i<lenF;i++)
+	//{
+	//  FIRsum+=FIR->operator[](i);
+	//}
+	float FIRval;
+	  //std::vector<int> timeseriesSamplePoints[nspan];
+	  //std::vector<int> FIRSamplePoints[nspan];and you 
+	  
+	  float t20=0.0;
+	  int point=0;
+	  int nt=0;
+	  
+
+	  
+	  Matrix FIRvals;
+	  Matrix FIRts;
+	  FIRvals.ReSize(ntotal+2,1);
+	  FIRts.ReSize(ntotal+2,1);
+	  string out="";
+
+	  ColumnVector voxeltimeseries = timeseries->voxelts(1,11,5);
+	  ColumnVector voxel20hz;
+	//  for (int t20n=0;t20n<100;t20n++){
+	//	
+	//	cout<<"round(t20n-skip/2.0) % (Hf*TR):"<<endl;
+	//	cout<<"round("<<t20n-skip/2.0<<") % ("<<Hf*TR<<"):"<<endl;
+	//	shift=mod((int)round(t20n-(int)(skip/2.0)),(int)(Hf*TR));
+	//	cout<<shift<<endl;
+	//	
+	//  }
+	  voxel20hz.ReSize(lenT20);
+		  
+		  ofstream myfile ("/home/dparker/Desktop/CppTs.txt");
+		  if (myfile.is_open())
+		  {
+			
+			for(int count = 1; count <= lenT; count ++){
+				myfile << voxeltimeseries(count) << "\n" ;
+			}
+			myfile.close();
+		  }
+		  else cout << "Unable to open file";
+		  
+
+		voxeltimeseries-=voxeltimeseries(1);
+		for (int i=1;i<=lenT;i++)
+		{
+		  cout<<voxeltimeseries(i)<<endl;
+		}
+		
+	  int linepoint=0;
+	  for (int t20n=0;t20n<lenT20;t20n++)
+	  {
+		t20=t20n/Hf;
+		shift=mod((int)round(t20n-(int)(skip/2.0)),(int)(Hf*TR));
+		//shift=((int) round(t20n-(int)(skip/2.0))) % (int)(Hf*TR);
+		//shift=intskip-t20n % (int)(Hf*TR);
+
+		//shift=(int)skip-shift;
+		//cout<<"Shift:\t"<<shift<<endl;
+		
+		nlow=(int) ceil((t20+toffset-firStart-shift/Hf)/TR)+1;
+		nhigh=(int) floor((t20+toffset+firStart-shift/Hf)/TR);
+		ntotal=nhigh-nlow;
+		
+		currentsum=0.0;
+		
+		//currentsum=0.0;
+		
+		//////////////////////////////////////////////////
+		//  Sanity Check
+		/////////////////////////////////////////////////
+		//cout<<"ts5"<<endl;
+		//currentsum=timeseries->operator[](5);
+		//cout<<currentsum(5,8,3)<<endl;
+		//cout<<"ts5*2"<<endl;
+		//currentsum=timeseries->operator[](5)*2;
+		//cout<<currentsum(5,8,3)<<endl;
+		//cout<<"ts6"<<endl;
+		//currentsum=timeseries->operator[](6);
+		//cout<<currentsum(5,8,3)<<endl;
+		//cout<<"ts5+6"<<endl;
+		//currentsum=timeseries->operator[](5)+timeseries->operator[](6);
+		//cout<<currentsum(5,8,3)<<endl;
+		//
+		//
+		
+		point=((int) round(lenF-shift)-1);
+		nt=0;
+		FIRvals=0.0;
+		FIRts=0.0;
+		float FIRsum=0.0;
+		
+		////////////////////////////////////////
+		// Column Vector Sanity Check
+		////////////////////////////////////////
+
+		
+		
+		while (point>=0)
+		{
+		  linepoint=nhigh-nt+1;
+		  //cout<<nhigh-nt+1<<endl;
+		  //cout<< "WHILE LOOP:"<<endl;
+		  //cout<< "point:\t"<<point<<endl;
+		  //cout<< "FIR[point]:\t"<<FIR->operator[](point)<<endl;
+		  //cout<< "nhigh-nt:\t"<<linepoint<<endl;
+		  //cout<< "line[nhigh-nt]:\t"<<voxeltimeseries(linepoint)<<endl;
+		  //cout<< "FIR*line:\t"<<FIR->operator[](point)*voxeltimeseries(linepoint)<<endl;
+		  //
+		  
+		  
+		  FIRvals(nt+1,1)=FIR->operator[](point);
+		  FIRts(nt+1,1)=point/20.0;
+		  currentsum+=(float)((FIR->operator[](point))*(voxeltimeseries(linepoint)));
+		  nt++;
+		  FIRsum=FIRsum+(FIR->operator[](point));
+		  point=point-intskip;
+		  
+		}
+		//cout<< "Last FIR val:\t"<<point+intskip<<endl;
+		//cout<< "shift:\t"<<shift<<endl;
+		//cout<< "t20:\t"<<t20<<endl;
+		//cout<< "t20n:\t"<<t20n<<endl;
+		//cout<< "nlow:\t"<<nlow<<endl;
+		//cout<< "nhigh:\t"<<nhigh<<endl;
+		//cout<< "firStart:\t"<<firStart<<endl;
+		//cout<< "tspan:\t"<<tspan<<endl;
+		//cout<< "ntotal:\t"<<ntotal<<endl;
+		//cout<< "FIRsum:\t"<<FIRsum<<endl;
+		//cout<< "nt:\t"<<nt<<endl;
+		//
+		voxel20hz(t20n+1)=currentsum;
+		stringstream ss;
+		string str;
+		ss << shift;
+		ss >> str;
+		out="/home/dparker/Desktop/FIR_shift"+str+".txt";
+		write_ascii_matrix(out, FIRvals, 12);
+		out="/home/dparker/Desktop/FIRt_shift"+str+".txt";
+		write_ascii_matrix(out, FIRts, 12);
+		
+		
+		
+		
+		
+		
+		//while (point>=0)
+		//{
+		//  FIRvals(nt+1,1)=FIR->operator[](point);
+		//  FIRts(nt+1,1)=point/20.0;
+		//  currentsum=currentsum+FIR->operator[](point)*timeseries->operator[](nhigh-nt);
+		//  nt++;
+		//  FIRsum=FIRsum+FIR->operator[](point);
+		//  point=point-intskip;
+		//  
+		//}
+		//stringstream ss;
+		//string str;
+		//ss << shift;
+		//ss >> str;
+		//out="/home/dparker/Desktop/FIR_shift"+str+".txt";
+		//write_ascii_matrix(out, FIRvals, 12);
+		//out="/home/dparker/Desktop/FIRt_shift"+str+".txt";
+		//write_ascii_matrix(out, FIRts, 12);
+		
+		//int firsamp=0;
+		//for (int nt=0; nt<ntotal; nt++)
+		//{
+		//  if (nlow+nt<lenT)
+		//  {
+		//	
+		//  	FIRval=FIR->operator[]((int) round(shift+nt*skip));
+		//	currentsum=currentsum+FIRval*timeseries->operator[](nlow+nt);
+		//	FIRsum+=FIRval;
+		//	firsamp=(int) round(shift+nt*skip);
+		//  }
+		//}
+		//int nt=0;
+		//while (round(shift+nt*skip)<lenF && nlow+nt<lenT )
+		//{
+		//	
+		//	FIRval=FIR->operator[]((int) round(shift+nt*skip));
+		//	currentsum=currentsum+FIRval*timeseries->operator[](nlow+nt);
+		//	//FIRsum+=FIRval;
+		//	nt++;
+		//}
+		
+		//cout<<"WhileLoopComplete"<<endl;
+		//cout<<"Last FIR val: \t"<<point+skip<<endl;
+		//cout<<"shift: \t"<<shift<<endl;
+		//cout<<"t20: \t"<<t20<<endl;
+		//cout<<"t20n: \t"<<t20n<<endl;
+		//cout<<"nlow: \t"<<nlow<<endl;
+		//cout<<"nhigh: \t"<<nhigh<<endl;
+		//cout<<"firStart: \t"<<firStart<<endl;
+		//cout<<"tspan: \t"<<tspan<<endl;
+		//cout<<"ntotal: \t"<<ntotal<<endl;
+		//cout<<"FIRsum: \t"<<FIRsum<<endl;
+		//cout<<"nt: \t"<<nt<<endl;
+		//cout<<"skip: \t"<<skip<<endl;
+		//cout<<"intskip: \t"<<intskip<<endl;
+		//std::cout<<"Made it here "<<t20n<<endl;
+		currentsum=currentsum/100;//FIRsum;
+		//
+		//copyconvert(currentsum,currentsumInt);
+		
+		//cout<<"setting volume "<<t20n<<endl;
+		//timeseries20hz->operator[](t20n)=currentsum;
+		//cout<<"set"<<endl;
+		
+		  
+
+	  }
+	  timeseries20hz->setvoxelts(voxel20hz,1,10,5);
+	  cout<<"keaving for loop"<<endl;
+	  cout<<"lenF:\t"<<lenF<<endl;
+	//  int firLen=SamplePoints.size();	
+	//  std::vector<float> pFIR;
+	//  pFIR.assign(FIR->begin(),FIR->end());
+	//  std::vector<float> padd;
+	//  padd.reserve(std::abs(shift));	
+	//  int ModSample=std::abs(shift);
+	//  
+	//  // If the shift if positive (shifting the signal to the right), then we want to DELAY the filter, add zeros to the END (Right hand side)		
+	//  
+	// 
+	//  padd.assign(std::abs(shift),pFIR.back());
+	//  //std::cout<<"shift:\t"<<shift<<std::endl;
+	//  //std::cout<<"padd:"<<std::endl;
+	//  //std::cout<<padd<<std::endl;
+	//  pFIR.insert(pFIR.end(),padd.begin(),padd.end());
+	//  
+	//  
+	//  if (shift<0)
+	//  {
+	//	  std::reverse(pFIR.begin(),pFIR.end());
+	//	  ModSample=0;
+	//  }
+	//   
+	//  
+	//  ColumnVector FIR_down_shift;
+	//  ColumnVector FIR_down;
+	//  FIR_down_shift.ReSize(firLen);
+	//  FIR_down.ReSize(firLen);
+	//  lenF=FIR_down_shift.Nrows();	
+	//  firLen=1;
+	//  
+	//  for (unsigned i = 0; i< SamplePoints.size(); i++)
+	//  {
+	//	  FIR_down(firLen)=FIR->operator[](SamplePoints[i]);
+	//	  SamplePoints[i]+=ModSample;
+	//	  FIR_down_shift(firLen)=pFIR[SamplePoints[i]];
+	//	  firLen+=1;
+	//  }
+	//  
+	//  // If the shift if negative (shifting the signal to the left), then we want to add the zeros to the beginning (flip the signal)		
+	// 
+	//  
+	//  
+	//  ColumnVector filtered;
+	//  filtered.ReSize(lenT);	
+	//  int startT = floor(lenF/2);	
+	//  int maxT = lenT-lenF-1;
+	//  float FiltSum=0;
+	// 
+	//  for (int i = 0; i<maxT; i++)
+	//  {
+	//	  FiltSum=0;
+	// 
+	//	  for (int f = 1; f<=lenF; f++)
+	//	  {
+	//		  FiltSum+=FIR_down_shift(f)*timeseries->operator()(i+f);
+	//	  }
+	//	  
+	//	  filtered(i+startT)=FiltSum;		
+	//  }
+	// 
+	//  ColumnVector filtered2;
+	//  filtered=filtered.Reverse();
+	//  filtered2=filtered;
+	//  
+	//  for (int i = 0; i<maxT; i++)
+	//  {
+	//	  FiltSum=0;
+	//	  
+	//	  for (int f = 1; f<=lenF; f++)
+	//	  {
+	//		  FiltSum+=FIR_down(f)*filtered(i+f);
+	//	  }
+	//	  
+	//	  filtered2(i+startT)=FiltSum;
+	//  }
+	//  
+	//  filtered=filtered2.Reverse();
+	//  *timeseries=filtered;
+	
+}
+					   //volume4D<float> *timeseries, volume4D<float> *timeseries20hz, std::vector<float> *FIR, float TR, float Hf, int padlen)
+void make_timeseries20hz(volume4D<float> *timeseries, volume4D<float> *timeseries20hz, std::vector<float> *FIR, float TR, float Hf, int padlen)
+{
+  //filter_timeseries20hz(&cattimeseries, &FIR, &timings20hz)
+	
+// 		9/27/16 - modified Kaiser Window resampling algorithm and convolution filtering routine.
+// 		Now matches output from old code almost perfectly (10e-3 error)
+	
+	int linepoint=0;
+	int xx=timeseries->xsize();
+	int yy=timeseries->ysize();
+	int zz=timeseries->zsize();
+	int lenT = timeseries->tsize();
+	int lenF = FIR->size();
+	int lenT20 = timeseries20hz->tsize();
+	float skip = Hf*TR;
+	int intskip=int(round(skip));
+	float tspan = lenF/Hf;
+	float firStart=1*tspan/2.0;
+	int nlow=0;
+	int nhigh=0;
+	int ntotal=(int) floor(tspan/TR-1);
+	float toffset=padlen*TR;
+	int shift=0;
+	  
+	volume<float> currentsum(xx,yy,zz);
+  
+	  float t20=0.0;
+	  int point=0;
+	  int nt=0;
+
+	  
+	  for (int t20n=0;t20n<lenT20;t20n++)
+	  {
+		t20=t20n/Hf;
+		shift=mod((int) t20n+(int)lenF/2.0,(int)(Hf*TR));
+		//shift=intskip-t20n % (int)(Hf*TR);
+
+		//shift=(int)skip-shift;
+		//cout<<"Shift:\t"<<shift<<endl;
+		
+		nlow=(int) ceil((t20+toffset-firStart)/TR);
+		nhigh=(int) floor((t20+toffset+firStart)/TR);
+		ntotal=nhigh-nlow;
+		
+		currentsum=0.0;
+		
+
+		point=((int) round(lenF-shift))-1;
+		nt=0;
+		float FIRsum=0.0;
+		
+
+		while (point>=0)
+		{
+		  linepoint=nhigh-nt;
+
+		  currentsum+=((FIR->operator[](point))*(timeseries->operator[](linepoint)));
+		  nt++;
+		  FIRsum=FIRsum+FIR->operator[](point);
+		  point=point-intskip;
+		  
+		}
+		timeseries20hz->operator[](t20n)=currentsum;
+	  }
+}
+
+
+void output_message(){
+	if (verbose.set())
+	{
+	  int size;
+	  int v1;
+	  std::string message="";
+	  Matrix rmat=unifrnd(1,3,0,100);
+	  Matrix choose;
+	  int bins[10]={0,0,0,0,0,0,0,0,0,0};
+	  int prob=0;
+	  
+	  prob=(int) floor(rmat(1,1));
+	  if (prob<=20){
+		 
+		  size = *(&oneoff + 1) - oneoff;
+		  choose=unifrnd(1,1,0,size-1);
+		  v1=choose(1,1);
+		  message=message+oneoff[v1]+" ";
+		  cout<<message<<endl;
+		  
+	  }
+	  
+	  else{
+		  prob=(int) floor(rmat(1,2));
+		  if (prob<=10){
+			  size = *(&adverbs + 1) - adverbs;
+			  choose=unifrnd(1,1,0,size-1);
+			  v1=choose(1,1);
+			  message=message+adverbs[v1]+" "; 
+		  }
+	
+		  size = *(&verbs + 1) - verbs;
+		  choose=unifrnd(1,1,0,size-1);
+		  v1=choose(1,1);
+		  message=message+verbs[v1]+" ";
+	
+		  
+		  size = *(&adjectives + 1) - adjectives;
+		  choose=unifrnd(1,2,0,size-1);
+		  v1=choose(1,1);
+		  message=message+adjectives[v1]+" ";
+		  
+		  prob=(int) floor(rmat(1,3));
+		  if (prob<=20){
+			  v1=choose(1,2);
+			  message=message+adjectives[v1]+" ";
+		  }        
+		  
+		  size = *(&nouns + 1) - nouns;
+		  choose=unifrnd(1,1,0,size-1);
+		  v1=choose(1,1);
+		  message=message+nouns[v1]+" "; 
+  
+	  }
+	  cout<<message<<endl;
+  }
 }
 
 
@@ -480,7 +969,7 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		//
 		if (tmx<zs){
 			std::cout<<"Multiband Mode Detected"<<std::endl;
-			output_progress(outputs);
+			output_message();
 			multiband=true;
 		}
 		
@@ -554,7 +1043,7 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		counter=1;
 		std::cout<<"Interleave Value: "<<interleave.value()<<std::endl;
 		std::cout<<"direction value: "<<direction.value()<<std::endl;
-		output_progress(outputs);
+		output_message();
 		for ( int i=0; abs(i)<interleave.value(); i=i+1*direction.value() )
 		{
 			for ( int j =0; j<=floor((float) zs/interleave.value()); j++ ) 
@@ -669,10 +1158,7 @@ int shift_volume()
 	Matrix orders;
 	std::vector<float> FIR;
 	
-//######################################################################################################
-// input stuff incase Ray wants 20Hz.  I'm not clever enough to do this a different way.
-// 06/08/2018 - Adding hires part.  I've decided to just filter in highres, 
-//######################################################################################################
+
 	int no_volumes = 0; 
 	int xx = 0;
 	int yy = 0;
@@ -680,174 +1166,13 @@ int shift_volume()
 	int HRhi=20;
 	volume4D<float> timeseries;
 	
-/////////// If I want 20Hz:
-	if (hires.set())
-	{
-	  
-	  volume4D<float> origtimeseries;
-	  
-	  //timeseries.destroy();
-	  
-	  
-	  if (input.set())
-	  {
-		
-		if (true) { cout << "Reading input volume" << endl; }  // DO NOT MESS WITH THIS IF STATEMENT ITS VERY IMPORTANT
-		output_progress(outputs);
-		read_volume4D(origtimeseries,input.value());
-		//std::cout<<"Read Input Volume"<<std::endl;
-		
-		
-		// If we set which axis we're using, correct for it so the triple for loops will work
-		if ( axis.set() ){
-		  // ADDED 06/06/2018
-		  // Tested and passed
-		  adjust_axis(origtimeseries,axis.value(),"forward");
-		}
-		
-		
-		
-		//origtimeseries=origtimeseries-origtimeseries.min();
-		//origtimeseries=origtimeseries/origtimeseries.max();
-		//origtimeseries=origtimeseries*500000;
-		 
-		int orig_t = origtimeseries.tsize();
-		xx = origtimeseries.xsize();
-		yy = origtimeseries.ysize();
-		zz = origtimeseries.zsize();
-		
-		
-		//std::cout<<"orig_t:\t"<<orig_t<<std::endl;
-		//std::cout<<"TR.value():\t"<<TR.value()<<std::endl;
-		//std::cout<<"HRhi:\t"<<HRhi<<std::endl;
-		//std::cout<<"calculated size:\t"<<round((orig_t)*TR.value()*HRhi)<<std::endl;
-		//std::cout<<timeseries.xsize()<<" "<<timeseries.ysize()<<" "<<timeseries.zsize()<<" "<<timeseries.tsize()<<std::endl;
-		//
-		
-		timeseries.reinitialize(xx,yy,zz,round((orig_t+1)*TR.value()*HRhi));
-		
-		
-		//std::cout<<timeseries.xsize()<<" "<<timeseries.ysize()<<" "<<timeseries.zsize()<<" "<<timeseries.tsize()<<std::endl;
-		//std::cout<<"Declared INT vol4d"<<std::endl;
-		
-		no_volumes = timeseries.tsize();
-		
-		//std::cout<<"NumVols:"<<std::endl;
-		//std::cout<<no_volumes<<std::endl;
-		
-		int skip=(int) round(TR.value()*HRhi);
-		std::vector<int> SamplePoints;
-		  int lasti=0;
-		  for (int i=1;i<=no_volumes-skip;i+=skip)
-		  {
-			SamplePoints.insert(SamplePoints.end(),i);
-			lasti=i;
-			
-		  }
 
-		
-		ColumnVector newtimeseries = timeseries.voxelts(1,1,1);
-		ColumnVector oldtimeseries = origtimeseries.voxelts(1,1,1);
-		
-		//std::cout<<"Max SampPoint:"<<std::endl;
-		//std::cout<<lasti<<std::endl;
-		//  
-		//std::cout<<"int TS size:"<<std::endl;  
-		//std::cout<<timeseries.xsize()<<" "<<timeseries.ysize()<<" "<<timeseries.zsize()<<" "<<timeseries.tsize()<<std::endl;
-		//
-		//  
-		//  
-		//std::cout<<"Generated SamplePoints Vector"<<std::endl;		
-		//std::cout<<"Generated TS column vectors"<<std::endl;
-		//std::cout<<"Newtimeseries size:"<<std::endl;
-		//std::cout<<newtimeseries.Nrows()<<std::endl;
-		//std::cout<<"oldtimeseries size:"<<std::endl;
-		//std::cout<<oldtimeseries.Nrows()<<std::endl;
-		//
-		//std::cout<<"N SampPoint:"<<std::endl;
-		//std::cout<<SamplePoints.size()<<std::endl;
-		//
-		//std::cout<<"orig volume size:"<<std::endl;
-		//std::cout<<origtimeseries.xsize()<<" "<<origtimeseries.ysize()<<" "<<origtimeseries.zsize()<<" "<<origtimeseries.tsize()<<std::endl;
-		////for (int slice=0; slice<zz; slice++)
-		////{		
-		////	//std::cout<<"1";
-		////	for (int x_pos = 0; x_pos < xx; x_pos++)
-		////	{
-		////		//std::cout<<"2";
-		////		for (int y_pos = 0; y_pos < yy; y_pos++)
-		////		{
-		////		  //std::cout<<"3";
-		////			for (int t_pos = 0; t_pos<SamplePoints.size(); t_pos++)
-		////			{
-		////			  //newtimeseries=0;
-		////			  //std::cout<<"4";
-		////			  oldtimeseries=origtimeseries.voxelts(x_pos,y_pos,slice);
-		////			  //std::cout<<t_pos<<std::endl;
-		////			  //std::cout<<SamplePoints[t_pos]<<std::endl;
-		////			  //
-		////			  //std::cout<<"newtimeseries samplepoints:"<<std::endl;
-		////			  ////std::cout<<newtimeseries(SamplePoints[t_pos])<<std::endl;
-		////			  //
-		////			  //std::cout<<"oldtimeseries t_pos:"<<std::endl;
-		////			  //std::cout<<oldtimeseries(t_pos+1)<<std::endl;
-		////			  
-		////			  newtimeseries(SamplePoints[t_pos])=oldtimeseries(t_pos+1);
-		////			  //std::cout<<"b";
-		////			  timeseries.setvoxelts(newtimeseries,x_pos,y_pos,slice);
-		////			  //std::cout<<"c"<<std::endl;
-		////			}
-		////		}
-		////	}
-		////}
-
-		for (int t_pos = 0; t_pos<SamplePoints.size(); t_pos++)
-		{
-		  //volume<int> intvol;
-		  //copyconvert(origtimeseries[t_pos],intvol);
-		  timeseries[SamplePoints[t_pos]]=origtimeseries[t_pos];
-		  //timeseries.nsertvolume(origtimeseries[t_pos],SamplePoints[t_pos]);
-		  //newtimeseries=0;
-		  //std::cout<<"4";
-		  //oldtimeseries=origtimeseries.voxelts(x_pos,y_pos,slice);
-		  ////std::cout<<t_pos<<std::endl;
-		  ////std::cout<<SamplePoints[t_pos]<<std::endl;
-		  ////
-		  ////std::cout<<"newtimeseries samplepoints:"<<std::endl;
-		  //////std::cout<<newtimeseries(SamplePoints[t_pos])<<std::endl;
-		  ////
-		  ////std::cout<<"oldtimeseries t_pos:"<<std::endl;
-		  ////std::cout<<oldtimeseries(t_pos+1)<<std::endl;
-		  //
-		  //newtimeseries(SamplePoints[t_pos])=oldtimeseries(t_pos+1);
-		  ////std::cout<<"b";
-		  //timeseries.setvoxelts(newtimeseries,x_pos,y_pos,slice);
-		  //std::cout<<"c"<<std::endl;
-		}
-
-		std::cout<<"Hires Image Created"<<std::endl;
-		std::cout<<"int TS size:"<<std::endl;  
-		std::cout<<timeseries.xsize()<<" "<<timeseries.ysize()<<" "<<timeseries.zsize()<<" "<<timeseries.tsize()<<std::endl;	  
-	  
-	  } else if (out.set()) {
-		cerr << "Must specify an input volume (-i or --in) to generate corrected data." << endl;
-		return -1;
-	  }
-	  
-	  
-	  
-	  
-	}
-	
-////////// Otherwise do the normal thing:
-	else
-	{
 	  //volume4D<float> timeseries;
 	    if (input.set())
 		{
 		  
 		  if (true) { cout << "Reading input volume" << endl; }  // DO NOT MESS WITH THIS IF STATEMENT ITS VERY IMPORTANT
-		  output_progress(outputs);
+		  output_message();
 		  read_volume4D(timeseries,input.value());
 		  
 		  
@@ -868,31 +1193,11 @@ int shift_volume()
 		  return -1;
 		}
 	  
-	}
 
-	
-//######################################################################################################
-// END
-//######################################################################################################
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-  	
+
 
 	std::cout<<"Create timing Arrays"<<std::endl;
-	output_progress(outputs);
+	output_message();
 	timings.ReSize(timeseries.zsize(),1);
 	orders.ReSize(timeseries.zsize(),1);	
 	make_timings(&timings,&orders,timeseries.zsize());
@@ -914,13 +1219,7 @@ int shift_volume()
 	int PassZero=1;
 	int skip=samplingrate*TR.value();
 	
-	if (hires.set())
-	{
-	  samplingrate=HRhi;
-	  skip=1;
-	  
-	}	
-	
+
 	// 01/16/17 - HPF can't operate the same way LPF does (on zero-padded data), so just filter normally.
 	// 01/16/17 - Testing HPF operation now...
 	if (hpf.set())
@@ -932,14 +1231,12 @@ int shift_volume()
 	
 	//std::cout<<"Pass Zero: "<<PassZero<<std::endl;
 	std::cout<<"Generate Filter START"<<std::endl;
-	output_progress(outputs);
-	window::window kaiser(cutoff,samplingrate,stopgain,transwidth,PassZero);
+	output_message();
+	window kaiser(cutoff,samplingrate,stopgain,transwidth,PassZero,TR.value());
 	FIR=kaiser.get_fir();
 	std::cout<<"Generate Filter FINISHED - success\n"<<std::endl;
-	output_progress(outputs);
-	//kaiser.print_info();
-	//std::cout<<"int TS size:"<<std::endl;  
-	//std::cout<<timeseries.xsize()<<" "<<timeseries.ysize()<<" "<<timeseries.zsize()<<" "<<timeseries.tsize()<<std::endl;
+	output_message();
+	
 	// I think this is just initializing the values that will be used in the loop
 	ColumnVector voxeltimeseries = timeseries.voxelts(1,1,1);
 	//std::cout<<"voxelts\n"<<std::endl;
@@ -1011,7 +1308,7 @@ int shift_volume()
 	write_ascii_matrix(directory+"TimingFile.txt", timings, 6);
 	std::cout<<"Timing file wrote to: "<<directory<<"TimingFile.txt\n"<<std::endl;
 	std::cout<<"Filtering START..."<<std::endl;
-	output_progress(outputs);
+	output_message();
 	for (int slice=1; slice<=zz; slice++)
 	{		
 		
@@ -1069,18 +1366,83 @@ int shift_volume()
 	
 	
 	std::cout<<"Filtering FINISHED - success\n"<<std::endl;
-	output_progress(outputs);
-	
-	
-
-	
-	
-
-	
+	output_message();
 	std::cout<<"Writing Output Volume"<<std::endl;
-	output_progress(outputs);
-	write_volume4D(timeseries,out.value());
+	output_message();
+	write_volume4D(timeseries,out.value());	
 	
+
+//######################################################################################################
+// input stuff incase Ray wants 20Hz.  I'm not clever enough to do this a different way.
+// 06/13/2018 - Adding hires part.  
+//######################################################################################################
+	if (hires.set())
+	{
+	  
+	  std::vector<float> FIR20;
+	  
+		int orig_t = timeseries.tsize();
+		xx = timeseries.xsize();
+		yy = timeseries.ysize();
+		zz = timeseries.zsize();
+		
+		volume4D<float> timeseries20hz(xx,yy,zz,round((orig_t+1)*TR.value()*HRhi));		
+		//volume4D<int> timeseries20hz_int(xx,yy,zz,round((orig_t+1)*TR.value()*HRhi));
+		
+		std::cout<<"Hires Image Created"<<std::endl;
+		std::cout<<"int TS size:"<<std::endl;  
+		std::cout<<timeseries20hz.xsize()<<" "<<timeseries20hz.ysize()<<" "<<timeseries20hz.zsize()<<" "<<timeseries20hz.tsize()<<std::endl;		
+		
+		no_volumes = timeseries20hz.tsize();
+		
+
+	
+		
+		int skip=(int) round(TR.value()*HRhi);
+		float timingshift=1.0/HRhi;
+		
+		cutoff=1.0/(2*TR.value());
+		
+		
+		window kaiser20hz(cutoff,HRhi,stopgain,transwidth,PassZero,TR.value());
+		FIR20=kaiser20hz.get_fir();
+		float startval=FIR20[0];
+		kaiser20hz.print_info();
+		std::cout<<"Generate Filter FINISHED - success\n"<<std::endl;
+		output_message();
+		int lenFIR=FIR20.size();
+		int padlen=ceil(lenFIR/(HRhi*TR.value()));
+		std::cout<<"Padlen:\t"<<padlen<<std::endl;
+		volume4D<float> padded_timeseries(xx,yy,zz,orig_t+padlen*2);
+		
+		for (int i=0; i<padlen; i++)
+		{
+		
+		  padded_timeseries[i]=timeseries[padlen-i];
+		  padded_timeseries[orig_t+padlen+i]=timeseries[orig_t-i-2];
+		}
+		
+		for (int i=padlen;i<padlen+orig_t;i++)
+		{
+		
+		  padded_timeseries[i]=timeseries[i-padlen];
+		}
+		for (int i=0;i<lenFIR;i++){
+		  FIR20[i]=FIR20[i]-startval;
+		}
+		padded_timeseries.swapdimensions(-1,2,3);  // for some reason the x axis got flipped here when I assigned the TS to padded_timeseries
+		// possibly a problem with FSL's assignment code, possibly a problem with my hacked to gether code.  
+		//std::for_each(FIR20.begin(),FIR20.end(),[](float& d ) {d-=startval;});
+
+	  make_timeseries20hz(&padded_timeseries, &timeseries20hz, &FIR20, TR.value(),HRhi, padlen);
+
+	  std::cout<<"Writing Highres Output Volume"<<std::endl;
+	  output_message();
+	
+	  write_volume4D(timeseries20hz,out.value()+"_Highres");	
+	  
+	}
+
   return 0;
 }
 
@@ -1092,7 +1454,8 @@ int main (int argc,char** argv)
 {
   
   srand(seed);
-  output_progress(outputs);
+  
+  output_message();
   OptionParser options(title, examples);
 
   try {
@@ -1112,6 +1475,7 @@ int main (int argc,char** argv)
 	options.add(hpf);
 	options.add(axis);
 	options.add(hires);
+	options.add(verbose);
 	
 	options.parse_command_line(argc, argv);
 
@@ -1171,7 +1535,7 @@ int main (int argc,char** argv)
 	exit(EXIT_FAILURE);
 	
   }
-  output_progress(outputs);
+  output_message();
   std::cout<<"Processing START"<<std::endl;
   int retval = shift_volume();
   std::cout<<"Processing FINISH - success\n"<<std::endl;

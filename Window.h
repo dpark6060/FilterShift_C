@@ -23,9 +23,10 @@ class window {
     std::vector<float> FIR;
     float StopGain;
     double TranWidth;
+    float TR;
     public:
         window();
-        window(float co, float sr, float sg, double tw, int pz);
+        window(float co, float sr, float sg, double tw, int pz, float TR);
         void kaiserord (float,float);
         float kaiser_atten (int,float);
         void kaiser_beta (float);
