@@ -476,7 +476,7 @@ void output_message(){
 		  choose=unifrnd(1,1,0,size-1);
 		  v1=choose(1,1);
 		  message=message+oneoff[v1]+" ";
-		  cout<<message<<endl;
+		  //cout<<message<<endl;
 		  
 	  }
 	  
