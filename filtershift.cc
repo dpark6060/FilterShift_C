@@ -827,7 +827,7 @@ std::vector<int> Padd_Timeseries(ColumnVector *voxeltimeseries, ColumnVector *ca
 	left_ext=left_ext.Reverse();
 	
 	float right_end=voxeltimeseries->operator()(no_volumes);
-	ColumnVector right_ext=voxeltimeseries->Rows(rangerh,no_volumes-2);
+	ColumnVector right_ext=voxeltimeseries->Rows(rangerh,no_volumes-1);
 	right_ext=right_ext.Reverse();
 	
 	//std::cout<<"ForLoop1"<<std::endl;

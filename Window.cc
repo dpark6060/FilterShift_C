@@ -268,11 +268,11 @@ std::vector<float> window::get_fir(){
     //{
     //    FIR[i]=FIR[i]-s;
     //}
-    
-    std::ofstream output_file("/home/dparker/Desktop/FIRtest.txt");
-    output_file.precision(32);
-    std::ostream_iterator<float> output_iterator(output_file,"\n");
-    std::copy(FIR.begin(),FIR.end(),output_iterator);
+    //
+    //std::ofstream output_file("/home/dparker/Desktop/FIRtest.txt");
+    //output_file.precision(32);
+    //std::ostream_iterator<float> output_iterator(output_file,"\n");
+    //std::copy(FIR.begin(),FIR.end(),output_iterator);
 
     
     return FIR;
