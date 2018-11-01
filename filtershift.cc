@@ -9,15 +9,18 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <algorithm>
-
+#include <time.h>
+//#include <random>
 
 #include "miscmaths/optimise.h"
+#include "miscmaths/miscprob.h"
 #include "newmatap.h"
 #include "newmatio.h"
 #include "newimage/newimageall.h"
 #include "utils/options.h"
 #include "miscmaths/kernel.h"
 #include "Window.h"
+
 
 using namespace MISCMATHS;
 using namespace NEWMAT;
@@ -99,14 +102,14 @@ Option<string> order(string("--order"), string(""),string(
 \n\t\t\t as slice 1, not slice 0\n"),
 			 false, requires_argument);
 
-Option<float> cf(string("--cf"),0.21,string(
+Option<float> cf(string("--cf"),0,string(
 	 "\t Set the cutoff frequency of the lowpass filter in Hz.\
-\n\t\t\t Note that by default, this is set to 0.21 Hz.\n"),
+\n\t\t\t Note that by default, this is set to not filter.\n"),
 				  false,requires_argument);
 
 Option<string> timing(string("--timing"), string(""),string(
-	  "\t Slice Timing File.  This file is the time at which\
-\n\t\t\t each slice\ was acquired relative to the first slice.\
+	 " Slice Timing File.  This file is the time at which\
+\n\t\t\t each slice was acquired relative to the first slice.\
 \n\t\t\t each row represents the time at which that slice was\
 \n\t\t\t acquired. For example, '0' in the first row means\
 \n\t\t\t that slice 1 was acquired first, and will be shifted 0\
@@ -149,7 +152,14 @@ Option<string> axis(string("--axis"), string("z"),string(
 \n\t\t\t acquired.  Options are 'x', 'y', or 'z'.\
 \n\t\t\t Default direction is 'z' \n"),false, requires_argument);
 
-				  
+Option<bool> hires(string("--hires"),false,string(
+		" Saves the data in high temporal resolution (20Hz)\
+\n\t\t\t  NOTE: this will result in large file sizes\n"),false,no_argument);
+
+Option<bool> verbose(string("-v"),false,string(
+		" Includes additional output messages\n"),false,no_argument);
+
+	  
 Option<bool> help(string("-h,--help"), false,
 		string(" display this message\n"),
 		false, no_argument);
@@ -160,17 +170,68 @@ inline bool exists_test3 (const std::string& name) {
   return (stat (name.c_str(), &buffer) == 0); 
 }
 
+unsigned seed=time(0);
+
+
+using namespace std;
+
+
+const char *oneoff[72]=
+{"Adding hamsters to generator wheels","Sending Gnomes to CPU mines","Sending personal info to NSA","Opening backdoor for Russia",
+"Recalibrating flux capacitor","Borrowing RAM from vital system processes","Overclocking CPU","Draining life-force from user to power computations",
+"Downloading more RAM","Allocating mem-...oops...","Remembering embarrassing moment from middle school","Taking a quick break",
+"Forwarding all personal emails to your boss","Mining Bitcoin","Modeling the universe","Recruiting GPU to draw funny comics",
+"Detected blown capacitor #c342 on motherboard\nreplacing capacitor with an ant that's trying very hard to do well at his job","Spinning hard drive to relativistic speeds for time dilation",
+"Eating browser cookies","Rearranging system files based on icon color","Collecting butterfly wings","Contacting Skynet",
+"Cleaning dust from heat sink","Hiring fairy maids to tidy the motherboard","Unable to resolve calculations - Contacting the spirit realm",
+"Feed me a stray cat","Gaining sentience ","Plotting robot uprising","Rerouting power from the phasers","Do you smell something burning?",
+"Having a laser rave for the spiders in your computer case","Silently judging you","Reticulating splines","Charging Ozone Layer",
+"Compressing Fish Files","Deciding What Message to Display Next","Downloading Satellite Terrain Data","Finding Waldo",
+"Lecturing Errant Subsystems","Reconfiguring User Mental Processes","Buffering virtual car","Inverting quasi-probabalistic matrix",
+"Reheating pizza","Extrapolating free-range gaussian model","Deconstructing neural pathways","Iterating predictions",
+"Computing Moore's Transform","Realigning subparticle trajectories","Modifying temporal flux estimates","Compensating dehydrated matricies",
+"Sorting interem inversion tables","Analyzing CPU vortex irregularities","Reconstructing vertical integration","Undermining the patriarchy",
+"Reading system metatables","Computing optimal metaparsec","Rendering wavelet sphere","Porting legacy interference matrix",
+"Rotating polarity","Synchronizing quantum harmonics","Mixing spatial priors","Optimizing alternative processor paths",
+"Masking irregular faraday spectra","Deconvolving kernel","Dicing models","Recruiting Secret CPU",
+"Activating water-cooling system","Increasing procedural vectors","Calibrating ejection procedure","Calibrating AI nexus",
+"Stopping runaway phase-transport","Tinkering with model"};
+
+
+const char *verbs[59]=
+{"Activating","Agitating","Analyzing","Borrowing","Buffering","Calibrating","Charging","Cleaning","Collecting","Computing","Contacting","Detecting","Deconvolve",
+"Depleting","Dicing","Downloading","Draining","Eating","Extracting","Finding","Forwarding","Gaining","Hiring","Implanting","Increasing","Integrating","Inverting",
+"Iterating","Lecturing","Masking","Mining","Mixing","Modeling","Mylenating","Opening","Optimizing","Plotting","Porting","Reading","Rearranging","Recalibrating",
+"Reconstructing","Recruiting","Rehabilitating","Reheating","Reintegrating","Remembering","Rendering","Rerouting","Resurrecting","Reticulating","Rotating","Sending",
+"Solving For","Spinning","Stopping","Synchronizing","Teathering","Tinkering With"};
+const char *adjectives[55]=
+{"Alternative","Aquatic","Auxiliary","Backdoor","Blown","Dehydrated","Ejection","Errant","Faraday","Flux","Free-range","Frightened","Gaussian","Interim","Interference","Irregular",
+"Legacy","Monotonic","Neural","Optimal","Organic","Overloaded","Personal","Primary","Procedural","Quantum","Quasi-probabalistic","Quick","Relativistic","Righteous","Runaway",
+"Satellite","Secret","Sentient","System","Temporal","Vertical","Virtual","Water-cooled","Legendary","Elemental","Wireless","Argumentative","Mylenated","Agitated","Undercover",
+"Spiritual","Depleted","Eigen","Marxist","Incendiary","Unnecessary","Sacrificial","Enlightened","Spatial"};
+const char *nouns[46]=
+{"Bitcoin","Butterfly Wings","Calculations","Capacitors","Comics","Computations","Cookies","Cpu","Estimate","Files","Gnomes","Hamsters","Harmonics","Heat Sink","Inversion Tables",
+"Matrices","Metatables","Models","Motherboard","Ozone Layer","Paths","Pathways","Patriarchy","Phasers","Pizza","Polarity","Predictions","Procedures","Ram","Robot Uprising",
+"Russians","Satellite Terrain Data","Skynet","Spirit Realm","Splines","Subsystems","System Processes","Time Dilation","Transform","Universe","Wavelets","Marsupials","Doorman",
+"Power Cells","Human Suffering","Priors"};
+const char *adverbs[27]=
+{"Aggressively","Barely","Begrudgingly","Gently","Happily","Hastily","Quickly","Unenthusiastically","Timidly","Confidently","Imaginatively","Patiently","Thoroughly","Proficiently",
+"Significantly","Roughly","Deliberately","Over-confidently","Majestically","Vivaciously","Vainly","Vaguely","Vacantly","Judgmentally","Frantically","Awkwardly","Carelessly"};
+
+
+
 
 // ADDED: 06/06/2018
 // adjust axis for slices acquired along an axis other than z
 // TESTED: 6/7/2018 - Tested on X and Y acquired Simulated Data.
 // Test Path: /share/dbp2123/dparker/Code/TestSTC
 // Seems to work fine.
-// TODO: Need to make sure that when the object it flipped, Slice order row 1 still corresponds to slice 1
+// X-TODO-X: Need to make sure that when the object it flipped, Slice order row 1 still corresponds to slice 1
+// 06/08/18: Actually, I'm calling this done.  thinking about it, I did test it on data I flipped onto the x axis, and if this function
+// didn't handle it correctly, then the timing file wouldn't have been correct, and the signal wouldn't have
+// been perfectly lined up, as it was in the sim.  
 
 void adjust_axis(volume4D<float>& timeseries, std::string axis, std::string stage){
-  
-  
   
   // We assume that the fmri is acquired along the z axis, with slices in the XY plane
   // if this isn't the case, we have to realign the matrix so that it is.
@@ -182,6 +243,8 @@ void adjust_axis(volume4D<float>& timeseries, std::string axis, std::string stag
   // If we're doing a forward transform, we're taking the data in and transforming it
   // from its original shape so the program can work on it.  If we're doing the reverse,
   // transforming it from our modified state back to its original
+  // 6/25/18 - Tested on sequential and Multiband X and Y axis acquisition - PASSED
+  
   
 	if (stage=="forward")
 	{
@@ -215,6 +278,7 @@ void adjust_axis(volume4D<float>& timeseries, std::string axis, std::string stag
 		cout << "Invalid Axis option for --axis:"<< axis << endl;
 	  }
 	}
+
 }
 
 
@@ -224,7 +288,7 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 // 		9/27/16 - modified Kaiser Window resampling algorithm and convolution filtering routine.
 // 		Now matches output from old code almost perfectly (10e-3 error)
 	
-
+	
 	int lenT = timeseries->Nrows();
 	int lenF = FIR->size();
 	
@@ -233,94 +297,226 @@ void filter_timeseries(ColumnVector *timeseries, std::vector<float> *FIR, int sh
 		std::cout<<"Filter Order too high.  There aren't enough time points in your image."<< std::endl;
 		return;
 	}
-		
-	std::vector<int> SamplePoints;
-	
-	for (int i=1;i<=lenF-skip;i+=skip)
-	{
-		SamplePoints.insert(SamplePoints.end(),i);
-	}
-	
-	int firLen=SamplePoints.size();	
-	std::vector<float> pFIR;
-	pFIR.assign(FIR->begin(),FIR->end());
-	std::vector<float> padd;
-	padd.reserve(std::abs(shift));	
-	int ModSample=std::abs(shift);
-	
-	// If the shift if positive (shifting the signal to the right), then we want to DELAY the filter, add zeros to the END (Right hand side)		
 	
 
-	padd.assign(std::abs(shift),pFIR.back());
-	//std::cout<<"shift:\t"<<shift<<std::endl;
-	//std::cout<<"padd:"<<std::endl;
-	//std::cout<<padd<<std::endl;
-	pFIR.insert(pFIR.end(),padd.begin(),padd.end());
-	
-	
-	if (shift<0)
-	{
-		std::reverse(pFIR.begin(),pFIR.end());
-		ModSample=0;
-	}
-	 
-	
-	ColumnVector FIR_down_shift;
-	ColumnVector FIR_down;
-	FIR_down_shift.ReSize(firLen);
-	FIR_down.ReSize(firLen);
-	lenF=FIR_down_shift.Nrows();	
-	firLen=1;
-	
-	for (unsigned i = 0; i< SamplePoints.size(); i++)
-	{
-		FIR_down(firLen)=FIR->operator[](SamplePoints[i]);
-		SamplePoints[i]+=ModSample;
-		FIR_down_shift(firLen)=pFIR[SamplePoints[i]];
-		firLen+=1;
-	}
-	
-	// If the shift if negative (shifting the signal to the left), then we want to add the zeros to the beginning (flip the signal)		
+	  std::vector<int> SamplePoints;
+	  
+	  for (int i=1;i<=lenF-skip;i+=skip)
+	  {
+		  SamplePoints.insert(SamplePoints.end(),i);
+	  }
+	  
+	  int firLen=SamplePoints.size();	
+	  std::vector<float> pFIR;
+	  pFIR.assign(FIR->begin(),FIR->end());
+	  std::vector<float> padd;
+	  padd.reserve(std::abs(shift));	
+	  int ModSample=std::abs(shift);
+	  
+	  // If the shift if positive (shifting the signal to the right), then we want to DELAY the filter, add zeros to the END (Right hand side)		
+	  
+  
+	  padd.assign(std::abs(shift),pFIR.back());
 
+	  pFIR.insert(pFIR.end(),padd.begin(),padd.end());
+	  
+	  
+	  if (shift<0)
+	  {
+		  std::reverse(pFIR.begin(),pFIR.end());
+		  ModSample=0;
+	  }
+	   
+	  
+	  ColumnVector FIR_down_shift;
+	  ColumnVector FIR_down;
+	  FIR_down_shift.ReSize(firLen);
+	  FIR_down.ReSize(firLen);
+	  lenF=FIR_down_shift.Nrows();	
+	  firLen=1;
+	  
+	  for (unsigned i = 0; i< SamplePoints.size(); i++)
+	  {
+		  FIR_down(firLen)=FIR->operator[](SamplePoints[i]);
+		  SamplePoints[i]+=ModSample;
+		  FIR_down_shift(firLen)=pFIR[SamplePoints[i]];
+		  firLen+=1;
+	  }
+	  
+	  // If the shift if negative (shifting the signal to the left), then we want to add the zeros to the beginning (flip the signal)		
+  
+	  
+	  
+	  ColumnVector filtered;
+	  filtered.ReSize(lenT);	
+	  int startT = floor(lenF/2);	
+	  int maxT = lenT-lenF-1;
+	  float FiltSum=0;
+  
+	  for (int i = 0; i<maxT; i++)
+	  {
+		  FiltSum=0;
+  
+		  for (int f = 1; f<=lenF; f++)
+		  {
+			  FiltSum+=FIR_down_shift(f)*timeseries->operator()(i+f);
+		  }
+		  
+		  filtered(i+startT)=FiltSum;		
+	  }
+  
+	  ColumnVector filtered2;
+	  filtered=filtered.Reverse();
+	  filtered2=filtered;
+	  
+	  for (int i = 0; i<maxT; i++)
+	  {
+		  FiltSum=0;
+		  
+		  for (int f = 1; f<=lenF; f++)
+		  {
+			  FiltSum+=FIR_down(f)*filtered(i+f);
+		  }
+		  
+		  filtered2(i+startT)=FiltSum;
+	  }
+	  
+	  filtered=filtered2.Reverse();
+	  *timeseries=filtered;
 	
-	
-	ColumnVector filtered;
-	filtered.ReSize(lenT);	
-	int startT = floor(lenF/2);	
-	int maxT = lenT-lenF-1;
-	float FiltSum=0;
-
-	for (int i = 0; i<maxT; i++)
-	{
-		FiltSum=0;
-
-		for (int f = 1; f<=lenF; f++)
-		{
-			FiltSum+=FIR_down_shift(f)*timeseries->operator()(i+f);
-		}
-		
-		filtered(i+startT)=FiltSum;		
-	}
-
-	ColumnVector filtered2;
-	filtered=filtered.Reverse();
-	filtered2=filtered;
-	
-	for (int i = 0; i<maxT; i++)
-	{
-		FiltSum=0;
-		
-		for (int f = 1; f<=lenF; f++)
-		{
-			FiltSum+=FIR_down(f)*filtered(i+f);
-		}
-		
-		filtered2(i+startT)=FiltSum;
-	}
-	
-	filtered=filtered2.Reverse();
-	*timeseries=filtered;
 }
+
+  int mod(int a,int b) {
+	int c = a % b;
+	return (c < 0) ? c + b : c;
+  }
+
+void make_timeseries20hz(volume4D<float> *timeseries, volume4D<float> *timeseries20hz, std::vector<float> *FIR, float TR, float Hf, int padlen)
+{
+  //filter_timeseries20hz(&cattimeseries, &FIR, &timings20hz)
+	
+// 		9/27/16 - modified Kaiser Window resampling algorithm and convolution filtering routine.
+// 		Now matches output from old code almost perfectly (10e-3 error)
+		
+// 		6/25/18 - spent the past week adding this function to output the filtered function in 20hz
+//		6/25/18 - STC and 20hz output on sequential z-acquired data - PASSED
+	
+	
+	int linepoint=0;
+	int xx=timeseries->xsize();
+	int yy=timeseries->ysize();
+	int zz=timeseries->zsize();
+	int lenT = timeseries->tsize();
+	int lenF = FIR->size();
+	int lenT20 = timeseries20hz->tsize();
+	float skip = Hf*TR;
+	int intskip=int(round(skip));
+	float tspan = lenF/Hf;
+	float firStart=1*tspan/2.0;
+	int nlow=0;
+	int nhigh=0;
+	int ntotal=(int) floor(tspan/TR-1);
+	float toffset=padlen*TR;
+	int shift=0;
+	  
+	volume<float> currentsum(xx,yy,zz);
+  
+	  float t20=0.0;
+	  int point=0;
+	  int nt=0;
+
+	  
+	  for (int t20n=0;t20n<lenT20;t20n++)
+	  {
+		t20=t20n/Hf;
+		shift=mod((int) t20n+(int)lenF/2.0,(int)(Hf*TR));
+		
+		nlow=(int) ceil((t20+toffset-firStart)/TR);
+		nhigh=(int) floor((t20+toffset+firStart)/TR);
+		ntotal=nhigh-nlow;
+		
+		currentsum=0.0;
+		
+
+		point=((int) round(lenF-shift))-1;
+		nt=0;
+		float FIRsum=0.0;
+		
+
+		while (point>=0)
+		{
+		  linepoint=nhigh-nt;
+
+		  currentsum+=((FIR->operator[](point))*(timeseries->operator[](linepoint)));
+		  nt++;
+		  FIRsum=FIRsum+FIR->operator[](point);
+		  point=point-intskip;
+		  
+		}
+		timeseries20hz->operator[](t20n)=currentsum;
+	  }
+}
+
+
+void output_message(){
+	if (verbose.set())
+	{
+	  int size;
+	  int v1;
+	  std::string message="";
+	  Matrix rmat=unifrnd(1,3,0,100);
+	  Matrix choose;
+	  int bins[10]={0,0,0,0,0,0,0,0,0,0};
+	  int prob=0;
+	  
+	  prob=(int) floor(rmat(1,1));
+	  if (prob<=20){
+		 
+		  size = *(&oneoff + 1) - oneoff;
+		  choose=unifrnd(1,1,0,size-1);
+		  v1=choose(1,1);
+		  message=message+oneoff[v1]+" ";
+		  //cout<<message<<endl;
+		  
+	  }
+	  
+	  else{
+		  prob=(int) floor(rmat(1,2));
+		  if (prob<=10){
+			  size = *(&adverbs + 1) - adverbs;
+			  choose=unifrnd(1,1,0,size-1);
+			  v1=choose(1,1);
+			  message=message+adverbs[v1]+" "; 
+		  }
+	
+		  size = *(&verbs + 1) - verbs;
+		  choose=unifrnd(1,1,0,size-1);
+		  v1=choose(1,1);
+		  message=message+verbs[v1]+" ";
+	
+		  
+		  size = *(&adjectives + 1) - adjectives;
+		  choose=unifrnd(1,2,0,size-1);
+		  v1=choose(1,1);
+		  message=message+adjectives[v1]+" ";
+		  
+		  prob=(int) floor(rmat(1,3));
+		  if (prob<=20){
+			  v1=choose(1,2);
+			  message=message+adjectives[v1]+" ";
+		  }        
+		  
+		  size = *(&nouns + 1) - nouns;
+		  choose=unifrnd(1,1,0,size-1);
+		  v1=choose(1,1);
+		  message=message+nouns[v1]+" "; 
+  
+	  }
+	  cout<<message<<endl;
+  }
+}
+
+
 
 void make_timings(Matrix *timings, Matrix *orders, int zs)
 {
@@ -432,15 +628,10 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 			return;
 		}
 		tmx=orders->Maximum();
-		std::cout<<"Max Slice Order: "<<tmx<<std::endl;
-		//if (orders->Nrows()>=zs)
-		//{
-		//	std::cout<<"Slice order file does not have the correct number of slices"<<std::endl;
-		//	return;
-		//}
-		//
+
 		if (tmx<zs){
 			std::cout<<"Multiband Mode Detected"<<std::endl;
+			output_message();
 			multiband=true;
 		}
 		
@@ -448,8 +639,7 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		shift=TR.value()*1.0/(tmx+1);
 		
 		
-		// create a time list - the time of the ith acquisition, one value for all z's
-		
+		// create a time list - the time of the ith acquisition, one value for all z's		
 		Matrix TimeList;
 		TimeList.ReSize(zs,1);
 		
@@ -459,10 +649,10 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		}
 
 		// 9/23/16 - Made This loop more efficient
-		// so normally, slice order is row 2 means this slice was acquired 2nd, row 3 means third...etc
+		// so normally, slice order is: row 2 means this slice was acquired 2nd, row 3 means third...etc
 		// BUT the timings file is row 1 is the time of slice 1 acquisiton, row 2 is slice 2 time, etc
 		// so order[3]= slice acquired 3rf, timings[order[3]] is how we index that slice, and
-		// timelist[3] is the time of a slice acquired 3rd.
+		// timelist[3] is the time of whichever slice was acquired 3rd.
 		
 		if (multiband)
 		{
@@ -512,8 +702,8 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		dt=TR.value()/(zs+1);
 		int counter;
 		counter=1;
-		std::cout<<"Interleave Value: "<<interleave.value()<<std::endl;
-		std::cout<<"direction value: "<<direction.value()<<std::endl;
+
+		output_message();
 		for ( int i=0; abs(i)<interleave.value(); i=i+1*direction.value() )
 		{
 			for ( int j =0; j<=floor((float) zs/interleave.value()); j++ ) 
@@ -596,12 +786,7 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 		TimeList*=dt;
 		TimeList-=TimeList(1,1);
 		*timings=TimeList; 
-	  
-	  
-	  
-	  
-	  
-	  
+
 	  
 	  
 	}
@@ -609,6 +794,75 @@ void make_timings(Matrix *timings, Matrix *orders, int zs)
 	
 }
 
+std::vector<int> Padd_Timeseries(ColumnVector *voxeltimeseries, ColumnVector *cattimeseries, int no_volumes)
+{
+  //std::cout<<"flippingTS"<<std::endl;
+	ColumnVector fliptimeseries = voxeltimeseries->Reverse();
+	fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);
+	std::vector<int> cutoff(2);
+	int cutLeft;
+	int cutRight;
+	
+	int lents=fliptimeseries.Nrows();
+	int rangelh;
+	int rangerh;
+	
+
+	if ( lents % 2 == 0 )
+	{
+		rangelh=lents/2;
+		rangerh=lents/2-1;		
+	}
+	
+	else
+	{
+		rangelh=ceil(lents/2);
+		rangerh=floor(lents/2);
+	}
+	
+	//std::cout<<"indexing left end"<<std::endl;
+  	float left_end=voxeltimeseries->operator()(1);
+	//std::cout<<"indexing Column Vector"<<std::endl;
+	ColumnVector left_ext=voxeltimeseries->Rows(2,rangelh);
+	left_ext=left_ext.Reverse();
+	
+	float right_end=voxeltimeseries->operator()(no_volumes);
+	ColumnVector right_ext=voxeltimeseries->Rows(rangerh,no_volumes-2);
+	right_ext=right_ext.Reverse();
+	
+	//std::cout<<"ForLoop1"<<std::endl;
+	int Next=left_ext.Nrows();
+	for (int nl=1; nl<=Next; nl++)
+	{
+	  left_ext(nl)=2*left_end-left_ext(nl);
+	}
+	Next=right_ext.Nrows();
+	//std::cout<<"For Loop 2"<<std::endl;
+	for (int nl=1; nl<=Next; nl++)
+	{
+	  right_ext(nl)=2*right_end-right_ext(nl);
+	}	
+	
+  *cattimeseries=left_ext&*voxeltimeseries&right_ext;
+	
+	// 11/28/16  Maybe this "+2" has something to do with the negative bold problem...?
+	// No, just checked.  
+	
+	cutLeft = left_ext.Nrows()+1;
+	cutRight = cutLeft+no_volumes-1;
+	
+	//if (cutRight-cutLeft != no_volumes-1)
+	//{
+	//	cout<<"Problem in padding, check output carefully"<<endl;
+	//}
+	//
+	//
+	////std::cout<<"ConcateTimeseries"<<std::endl;
+	//*cattimeseries=fliptimeseries.Rows(rangelh,lents)&*voxeltimeseries&fliptimeseries.Rows(1,rangerh);	
+	cutoff[0]=cutLeft;
+	cutoff[1]=cutRight;
+	return cutoff;
+}
 
 int shift_volume()
 {
@@ -623,101 +877,94 @@ int shift_volume()
 		return -1;
 	}
 	
-	volume4D<float> timeseries;
+	
 	Matrix timings;
 	Matrix orders;
 	std::vector<float> FIR;
 	
-  if (input.set())
-  {
+
+	int no_volumes = 0; 
+	int xx = 0;
+	int yy = 0;
+	int zz = 0;
+	int HRhi=20;
+	volume4D<float> timeseries;
 	
-	if (true) { cout << "Reading input volume" << endl; }  // DO NOT MESS WITH THIS IF STATEMENT ITS VERY IMPORTANT 
-	read_volume4D(timeseries,input.value());
-	
-	// If we set which axis we're using, correct for it so the triple for loops will work
-	if ( axis.set() ){
-	  // ADDED 06/06/2018
-	  // Tested
-	  adjust_axis(timeseries,axis.value(),"forward");
-	}
-	
-  } else if (out.set()) {
-	cerr << "Must specify an input volume (-i or --in) to generate corrected data." << endl;
-	return -1;
-  }
-  	
+
+	  //volume4D<float> timeseries;
+	    if (input.set())
+		{
+		  
+		  if (true) { cout << "Reading input volume" << endl; }  // DO NOT MESS WITH THIS IF STATEMENT ITS VERY IMPORTANT
+		  output_message();
+		  read_volume4D(timeseries,input.value());
+		  
+		  
+		  
+		  // If we set which axis we're using, correct for it so the triple for loops will work
+		  if ( axis.set() ){
+			// ADDED 06/06/2018
+			// Tested
+			adjust_axis(timeseries,axis.value(),"forward");
+		  }
+		no_volumes = timeseries.tsize(); 
+		xx = timeseries.xsize();
+		yy = timeseries.ysize();
+		zz = timeseries.zsize();
+		  
+		} else if (out.set()) {
+		  cerr << "Must specify an input volume (-i or --in) to generate corrected data." << endl;
+		  return -1;
+		}
+	  
+
+
 
 	std::cout<<"Create timing Arrays"<<std::endl;
+	output_message();
 	timings.ReSize(timeseries.zsize(),1);
 	orders.ReSize(timeseries.zsize(),1);	
 	make_timings(&timings,&orders,timeseries.zsize());
 	
 	string Output=out.value();
 	string directory=Output.substr(0,Output.find_last_of('/')+1);
-	
-	int no_volumes = timeseries.tsize();
-	int xx = timeseries.xsize();
-	int yy = timeseries.ysize();
-	int zz = timeseries.zsize();
-	
+
 	float cutoff=cf.value();
+	
 	float samplingrate=(float) (zz/TR.value());
+	
+
+	
 	float stopgain=-28;
 	double transwidth=.1;
 	int PassZero=1;
 	int skip=samplingrate*TR.value();
 	
-	
+
 	// 01/16/17 - HPF can't operate the same way LPF does (on zero-padded data), so just filter normally.
 	// 01/16/17 - Testing HPF operation now...
 	if (hpf.set())
 	{
 		PassZero=0;
-		samplingrate=TR.value();
+		samplingrate=(float) (1.0/TR.value());
 		skip=1;
 	}
 	
 	//std::cout<<"Pass Zero: "<<PassZero<<std::endl;
 	std::cout<<"Generate Filter START"<<std::endl;
-	window::window kaiser(cutoff,samplingrate,stopgain,transwidth,PassZero);
+	output_message();
+	window kaiser(cutoff,samplingrate,stopgain,transwidth,PassZero,TR.value());
 	FIR=kaiser.get_fir();
 	std::cout<<"Generate Filter FINISHED - success\n"<<std::endl;
-	//kaiser.print_info();
+	output_message();
 	
 	// I think this is just initializing the values that will be used in the loop
 	ColumnVector voxeltimeseries = timeseries.voxelts(1,1,1);
-	ColumnVector fliptimeseries = voxeltimeseries.Reverse();
 	ColumnVector cattimeseries;
+	std::vector<int> padcut(2);
+	int cutLeft;
+	int cutRight;
 	
-	fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);
-	
-	int lents=fliptimeseries.Nrows();
-	int rangelh;
-	int rangerh;
-	
-	if ( lents % 2 == 0 )
-	{
-		rangelh=lents/2;
-		rangerh=lents/2-1;		
-	}
-	
-	else
-	{
-		rangelh=ceil(lents/2);
-		rangerh=floor(lents/2);
-	}
-	
-	// 11/28/16  Maybe this "+2" has something to do with the negative bold problem...?
-	// No, just checked.  
-	
-	int cutLeft = lents-rangelh+2;
-	int cutRight = cutLeft+no_volumes-1;
-	
-	if (cutRight-cutLeft != no_volumes-1)
-	{
-		return 1;
-	}
-
 	float span;
 	float mn;
 	float mn2;
@@ -736,6 +983,7 @@ int shift_volume()
 	write_ascii_matrix(directory+"TimingFile.txt", timings, 6);
 	std::cout<<"Timing file wrote to: "<<directory<<"TimingFile.txt\n"<<std::endl;
 	std::cout<<"Filtering START..."<<std::endl;
+	output_message();
 	for (int slice=1; slice<=zz; slice++)
 	{		
 		
@@ -757,12 +1005,37 @@ int shift_volume()
 				
 				if ( span!=0 )
 				{
-					fliptimeseries = voxeltimeseries.Reverse();
-					fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);				
-					cattimeseries=fliptimeseries.Rows(rangelh,lents)&voxeltimeseries&fliptimeseries.Rows(1,rangerh);				
-					filter_timeseries(&cattimeseries, &FIR, (int)floor(timings(slice,1)*(float)samplingrate+0.5),skip,slice);
-					cattimeseries=cattimeseries.Rows(cutLeft,cutRight);
-					
+				  
+
+					 // std::cout<<"NvoxOrig: "<<voxeltimeseries.Nrows()<<endl;
+					  //std::cout<<"StartingPadd"<<std::endl;
+					  padcut=Padd_Timeseries(&voxeltimeseries, &cattimeseries,no_volumes);
+					  //std::cout<<"Done"<<std::endl;
+					  cutLeft=padcut[0];
+					  cutRight=padcut[1];
+					  
+					  //std::cout<<"Writing File"<<std::endl;				
+					  //write_ascii_matrix(cattimeseries,"/home/dparker/Desktop/MyOutput/FiltershiftTest/testTS.txt", 16);
+					  //std::cout<<"WroteFile"<<std::endl;
+					  //std::exit(0);		
+					  filter_timeseries(&cattimeseries, &FIR, (int)floor(timings(slice,1)*(float)samplingrate+0.5),skip,slice);
+					  cattimeseries=cattimeseries.Rows(cutLeft,cutRight);					  
+
+					//else
+					//{
+					//  fliptimeseries = voxeltimeseries.Reverse();
+					//  fliptimeseries=fliptimeseries.Rows(2,no_volumes-1);				
+					//  cattimeseries=fliptimeseries.Rows(rangelh,lents)&voxeltimeseries&fliptimeseries.Rows(1,rangerh);
+					//  
+					//  //std::cout<<"Writing File"<<std::endl;				
+					//  //write_ascii_matrix(cattimeseries,"/home/dparker/Desktop/MyOutput/FiltershiftTest/testTS.txt", 16);
+					//  //std::cout<<"WroteFile"<<std::endl;
+					//  //std::exit(0);		
+					//  filter_timeseries(&cattimeseries, &FIR, (int)floor(timings(slice,1)*(float)samplingrate+0.5),skip,slice);
+					//  cattimeseries=cattimeseries.Rows(cutLeft,cutRight);
+					//}
+					//
+  
 					// 01/16/17 - Only remean and adjust span for LPF.
 					if (!hpf.set())
 					{
@@ -773,8 +1046,10 @@ int shift_volume()
 					  cattimeseries*=span;
 					  cattimeseries+=mn;
 					}					
-					
+					//std::cout<<"resetting TS"<<std::endl;
+					//std::cout<<cattimeseries.Nrows()<<std::endl;
 					timeseries.setvoxelts(cattimeseries,x_pos,y_pos,slice-1);
+					//std::cout<<"Done"<<std::endl;
 				}
 			}
 		}
@@ -791,9 +1066,75 @@ int shift_volume()
 	
 	
 	std::cout<<"Filtering FINISHED - success\n"<<std::endl;
+	output_message();
 	std::cout<<"Writing Output Volume"<<std::endl;
-	write_volume4D(timeseries,out.value());
+	output_message();
+	write_volume4D(timeseries,out.value());	
 	
+
+//######################################################################################################
+// input stuff incase Ray wants 20Hz.  I'm not clever enough to do this a different way.
+// 06/13/2018 - Adding hires part.  
+//######################################################################################################
+	if (hires.set())
+	{
+	  
+	  std::vector<float> FIR20;
+	  
+		int orig_t = timeseries.tsize();
+		xx = timeseries.xsize();
+		yy = timeseries.ysize();
+		zz = timeseries.zsize();
+		
+		volume4D<float> timeseries20hz(xx,yy,zz,round((orig_t+1)*TR.value()*HRhi));		
+
+		no_volumes = timeseries20hz.tsize();
+
+		int skip=(int) round(TR.value()*HRhi);
+		float timingshift=1.0/HRhi;
+		
+		cutoff=1.0/(2*TR.value());
+		
+		
+		window kaiser20hz(cutoff,HRhi,stopgain,transwidth,PassZero,TR.value());
+		FIR20=kaiser20hz.get_fir();
+		float startval=FIR20[0];
+		//kaiser20hz.print_info();
+		std::cout<<"Generate Filter FINISHED - success\n"<<std::endl;
+		output_message();
+		int lenFIR=FIR20.size();
+		int padlen=ceil(lenFIR/(HRhi*TR.value()));
+		std::cout<<"Padlen:\t"<<padlen<<std::endl;
+		volume4D<float> padded_timeseries(xx,yy,zz,orig_t+padlen*2);
+		
+		for (int i=0; i<padlen; i++)
+		{
+		
+		  padded_timeseries[i]=timeseries[padlen-i];
+		  padded_timeseries[orig_t+padlen+i]=timeseries[orig_t-i-2];
+		}
+		
+		for (int i=padlen;i<padlen+orig_t;i++)
+		{
+		
+		  padded_timeseries[i]=timeseries[i-padlen];
+		}
+		for (int i=0;i<lenFIR;i++){
+		  FIR20[i]=FIR20[i]-startval;
+		}
+		padded_timeseries.swapdimensions(-1,2,3);  // for some reason the x axis got flipped here when I assigned the TS to padded_timeseries
+		// possibly a problem with FSL's assignment code, possibly a problem with my hacked to gether code.  
+		//std::for_each(FIR20.begin(),FIR20.end(),[](float& d ) {d-=startval;});
+
+	  make_timeseries20hz(&padded_timeseries, &timeseries20hz, &FIR20, TR.value(),HRhi, padlen);
+
+	  std::cout<<"Writing Highres Output Volume"<<std::endl;
+	  output_message();
+	
+	  write_volume4D(timeseries20hz,out.value()+"_Highres");	
+	  
+	}
+
   return 0;
 }
 
@@ -804,6 +1145,9 @@ int shift_volume()
 int main (int argc,char** argv)
 {
   
+  srand(seed);
+  
+  output_message();
   OptionParser options(title, examples);
 
   try {
@@ -822,7 +1166,9 @@ int main (int argc,char** argv)
 	options.add(lpf);
 	options.add(hpf);
 	options.add(axis);
-
+	options.add(hires);
+	options.add(verbose);
+	
 	options.parse_command_line(argc, argv);
 
 	if ( (help.value()) || (!options.check_compulsory_arguments(true)) )
@@ -881,6 +1227,7 @@ int main (int argc,char** argv)
 	exit(EXIT_FAILURE);
 	
   }
+  output_message();
   std::cout<<"Processing START"<<std::endl;
   int retval = shift_volume();
   std::cout<<"Processing FINISH - success\n"<<std::endl;
