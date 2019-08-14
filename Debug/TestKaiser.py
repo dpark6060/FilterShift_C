@@ -12,10 +12,10 @@ import scipy.signal as sp
 
 stopgain=-28
 transwidth=0.1
-samplingrate=20.0
+samplingrate=25
 PassZero=1
 Nyq=samplingrate/2
-cutoff=0.25
+cutoff=0.21
 
 N,beta=sp.kaiserord(stopgain,transwidth/Nyq)
 
